@@ -1,4 +1,0 @@
-/Users/cyrusghazanfar/Desktop/cornell-tech/dist-system/raft-p2p/cmake-build-debug/CMakeFiles/rebuild_cache.dir
-/Users/cyrusghazanfar/Desktop/cornell-tech/dist-system/raft-p2p/cmake-build-debug/CMakeFiles/edit_cache.dir
-/Users/cyrusghazanfar/Desktop/cornell-tech/dist-system/raft-p2p/cmake-build-debug/CMakeFiles/raft-p2p.dir
-/Users/cyrusghazanfar/Desktop/cornell-tech/dist-system/raft-p2p/cmake-build-debug/CMakeFiles/raft-p2p_autogen.dir
