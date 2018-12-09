@@ -8,7 +8,7 @@
 
 #include "main.hh"
 
-state currentState;
+enum node_state nodeState;
 
 ChatDialog::ChatDialog()
 {
@@ -40,29 +40,29 @@ ChatDialog::ChatDialog()
 		exit(1);
 
 	// Randomize local origin
-	qsrand((uint) QDateTime::currentMSecsSinceEpoch());
-	local_origin = QString::number(qrand());
-	setWindowTitle(local_origin);
+//	qsrand((uint) QDateTime::currentMSecsSinceEpoch());
+//	local_origin = QString::number(qrand());
+//	setWindowTitle(local_origin);
 
 	// // Initialize timer for message timeout
-	timer = new QTimer(this);
-	connect(timer, SIGNAL(timeout()), this, SLOT(timeoutHandler()));
+//	timer = new QTimer(this);
+//	connect(timer, SIGNAL(timeout()), this, SLOT(timeoutHandler()));
+//
+//	antiEntropyTimer = new QTimer(this);
+//	connect(antiEntropyTimer, SIGNAL(timeout()), this, SLOT(antiEntropyHandler()));
 
-	antiEntropyTimer = new QTimer(this);
-	connect(antiEntropyTimer, SIGNAL(timeout()), this, SLOT(antiEntropyHandler()));
-
-	qDebug() << "Starting ANTIENTROPY timer";
-	antiEntropyTimer->start(5000);
+//	qDebug() << "Starting ANTIENTROPY timer";
+//	antiEntropyTimer->start(5000);
 
 	// Initialize user-defined variables
-	currentSeqNum = 1;
+//	currentSeqNum = 1;
 
 	socket->pingList = socket->PeerList();
 
 	qDebug() << "LOCAL ORIGIN: " << local_origin;
 
 	// set waiting for a status to 0 (false) since instance just launched
-	currentState.waitingForStatus = 0;
+	nodeState = FOLLOWER;
 
 	// Register a callback on the textline's returnPressed signal
 	// so that we can send the message entered by the user.
@@ -72,7 +72,7 @@ ChatDialog::ChatDialog()
 	// Callback fired when message is received
 	connect(socket, SIGNAL(readyRead()), this, SLOT(readPendingMessages()));
 
-	Ping(socket);
+//	Ping(socket);
 	
 }
 
@@ -137,7 +137,7 @@ void ChatDialog::processReceivedMessage(
 			localStatusMap);
 }
 
-void ChatDialog::processStatusMessage(QMap<QString, QMap<QString, quint32>> peerWantMap, QHostAddress sender, quint16 senderPort) {
+void ChatDialog::processStatusMessage(QMap<QString, QMap<QString, quint32> > peerWantMap, QHostAddress sender, quint16 senderPort) {
 	
 	QMap<QString, QVariant> messageToSend;
 	// Unwrap peerWant
@@ -149,19 +149,19 @@ void ChatDialog::processStatusMessage(QMap<QString, QMap<QString, quint32>> peer
 	qDebug() << "\nmessage contains want:" << peerStatusMap;
 
 			// check if the want matches the one we are waiting an ACK for
-	if (currentState.waitingForStatus == 1) {
-		if (last_message_sent.contains(senderPort)) {
-			QString lms_origin = last_message_sent[senderPort].value("Origin").toString();
-			quint32 lms_seqno = last_message_sent[senderPort].value("SeqNo").toUInt();
-
-			if ((peerStatusMap.contains(lms_origin)) && (peerStatusMap[lms_origin] == lms_seqno+1)) {
-				last_message_sent.remove(senderPort);				
-				currentState.waitingForStatus = 0;
-				qDebug() << "in processstatusmessage about to stop timer";
-				timer->stop();
-			}
-		}
-	}
+//	if (currentState.waitingForStatus == 1) {
+//		if (last_message_sent.contains(senderPort)) {
+//			QString lms_origin = last_message_sent[senderPort].value("Origin").toString();
+//			quint32 lms_seqno = last_message_sent[senderPort].value("SeqNo").toUInt();
+//
+//			if ((peerStatusMap.contains(lms_origin)) && (peerStatusMap[lms_origin] == lms_seqno+1)) {
+//				last_message_sent.remove(senderPort);
+//				currentState.waitingForStatus = 0;
+//				qDebug() << "in processstatusmessage about to stop timer";
+//				timer->stop();
+//			}
+//		}
+//	}
 
 	// Set initial status
 	Status status = INSYNC;
@@ -377,7 +377,7 @@ void ChatDialog::timeoutHandler()
 	for (auto portNumber : last_message_sent.keys()) {
 
 		sendMessage(serializeMessage(last_message_sent[portNumber]), portNumber);
-		currentState.waitingForStatus = 0;
+//		currentState.waitingForStatus = 0;
 	}
 
 	timer->stop();
@@ -398,13 +398,15 @@ void ChatDialog::gotReturnPressed()
 {
 	QString text = textline->text();
 
-	textview->append(local_origin + ": " + textline->text());
+//	textview->append(local_origin + ": " + textline->text());
+
+	checkCommand(text);
 
 	// Append to localStatusMap
 	localStatusMap[local_origin] = currentSeqNum+1;
 
 	// about to send message so set current waitingForStatus to true
-	currentState.waitingForStatus = 1;
+//	currentState.waitingForStatus = 1;
 
 	// about to send a message from chat diaglog, start a timer
 	timer->start(1000);
@@ -416,6 +418,47 @@ void ChatDialog::gotReturnPressed()
 
 	// Clear the textline to get ready for the next input message.
 	textline->clear();
+}
+
+void ChatDialog::checkCommand(QString text) {
+
+
+	if (text.contains("START", Qt::CaseSensitive)) {
+		qDebug() << "COMMAND START";
+		// change state to follower and start timer
+		// if timer runs out change state to CANDIDATE
+		// else respond to heatbeats
+
+	}
+	else if (text.contains("MSG", Qt::CaseSensitive)) {
+		qDebug() << "COMMAND MSG";
+
+	}
+	else if (text.contains("GET_CHAT", Qt::CaseSensitive)) {
+		qDebug() << "COMMAND GET_CHAT";
+
+	}
+	else if (text.contains("STOP", Qt::CaseSensitive)) {
+		qDebug() << "COMMAND STOP";
+
+
+	}
+	else if (text.contains("DROP", Qt::CaseSensitive)) {
+		qDebug() << "COMMAND DROP";
+
+	}
+	else if (text.contains("RESTORE", Qt::CaseSensitive)) {
+		qDebug() << "COMMAND RESTORE";
+
+	}
+	else if (text.contains("GET_NODES", Qt::CaseSensitive)) {
+		qDebug() << "COMMAND GET_NODES";
+
+	}
+	else {
+		qDebug() << "Did not recognize valid command";
+	}
+	return;
 }
 
 void ChatDialog::getRandomNeighbor() {

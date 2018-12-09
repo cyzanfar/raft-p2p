@@ -4,14 +4,13 @@
 #include <QDialog>
 #include <QTextEdit>
 #include <QLineEdit>
-#include <QUdpSocket>
+#include <QtNetwork/QUdpSocket>
 #include <QTimer>
 #include <QElapsedTimer>
 
-// state struct for waiting ACK (status) or not
-struct state {
-    int waitingForStatus;
-};
+// enum for state of a node
+enum node_state { FOLLOWER, CANDIDATE, LEADER };
+
 
 class NetSocket : public QUdpSocket
 {
@@ -47,11 +46,12 @@ public:
 	quint32 currentSeqNum;
 	QString local_origin;
 	QMap<QString, quint32> localStatusMap;
-	QMap<quint16, QMap<QString, QVariant>> last_message_sent;
+	QMap<quint16, QMap<QString, QVariant > > last_message_sent;
 	QList<quint16> neighborList;
 	QTimer *timer;
 	QTimer *antiEntropyTimer;
-	QMap<QString, QMap<quint32, QMap<QString, QVariant>>> messageList;
+	QMap<QString, QMap<quint32, QMap<QString, QVariant> > > messageList;
+	void checkCommand(QString command);
 
 
 public slots:
@@ -70,7 +70,7 @@ private:
 	void processIncomingData(QByteArray datagramReceived, QHostAddress sender, quint16 senderPort, NetSocket *socket);
 	QByteArray serializeLocalMessage(QString messageText);
 	QByteArray serializeMessage(QMap<QString, QVariant> messageToSend);
-	void processStatusMessage(QMap<QString, QMap<QString, quint32>> peerWantMap, QHostAddress sender, quint16 senderPort);
+	void processStatusMessage(QMap<QString, QMap<QString, quint32> > peerWantMap, QHostAddress sender, quint16 senderPort);
 	void cacheLastSentMessage(quint16 peerPost, QByteArray buffer);
 	void getRandomNeighbor();
 };
