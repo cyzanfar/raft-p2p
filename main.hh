@@ -58,6 +58,9 @@ public:
 	QString local_origin;
 	QList<quint16> neighborList;
 	QTimer *heartbeatTimer;
+	void checkCommand(QString command);
+	void sendRequestVoteRPC();
+	void sendHeartbeat();
 	QTimer *requestVoteTimer;
 	void processRequestVote(QMap<QString, QVariant> voteRequest, quint16 senderPort);
 	void processAppendEntries(QMap<QString, QVariant> AppendEntries);

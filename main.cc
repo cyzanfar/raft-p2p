@@ -204,7 +204,7 @@ void ChatDialog::sendRequestVoteRPC()
 
 	QMap<QString, QMap<QString, QVariant>> requestVoteMap;
 	QByteArray buffer;
-	QDataStream stream(&buffer,  QIODevice::ReadWrite);
+	QDataStream stream(&buffer, QIODevice::ReadWrite);
 
 	requestVoteMap["RequestVote"].insert("term", nodeState.currentTerm);
 	requestVoteMap["RequestVote"].insert("candidateId", nodeState.id);
@@ -219,6 +219,26 @@ void ChatDialog::sendRequestVoteRPC()
 	for (int p = 0; p < peerList.size(); p++) {
 		sendMessage(buffer, p);
 	}
+}
+
+void ChatDialog::sendHeartbeat(quint16 port, QList<quint32>) {
+
+	QMap<QString, QMap<QString, QVariant>> heartBeatMap;
+	QByteArray buffer;
+	QDataStream stream(&buffer, QIODevice::ReadWrite);
+
+	QList<QMap<quint32, QMap<QString, QVariant>>> entries = [];
+
+	heartBeatMap["Heartbeat"].insert("term", nodeState.currentTerm);
+	heartBeatMap["Heartbeat"].insert("leaderId", nodeState.id);
+	heartBeatMap["Heartbeat"].insert("prevLogIndex", 0); //TODO check for server previndex
+	heartBeatMap["Heartbeat"].insert("prevLogTerm", 0); //TODO check for server prevterm
+	heartBeatMap["Heartbeat"].insert("entries", entries);
+	heartBeatMap["Heartbeat"].insert("leaderCommit", nodeState.commitIndex);
+
+	stream << heartBeatMap;
+
+	sendMessage(buffer, port);
 }
 
 int ChatDialog::getLastEntryFor(QList<std::tuple<quint16, quint16, QString>> logEntries, int pos)
