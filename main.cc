@@ -106,15 +106,22 @@ void ChatDialog::processRequestVote(QMap<QString, QVariant> voteRequest, quint16
 	// is longer is more up-to-date.
 
 	quint32 candidateTerm = voteRequest.value("term").toUInt();
-	quint32 candidateLastAppliedIndex = voteRequest.value("lastLogIndex").toUInt();
+	quint32 candidateLastLogIndex = voteRequest.value("lastLogIndex").toUInt();
+    quint32 candidateLastLogTerm = voteRequest.value("lastLogTerm").toUInt();
 
-	if ((candidateTerm < nodeState.currentTerm) || \
+    int localLastLogIndex = getLastEntryFor(nodeState.logEntries, 0); // the last log index
+
+    int localLastLogTerm = getLastEntryFor(nodeState.logEntries, 1); // the last log index
+
+    getLastEntryFor(nodeState.logEntries, 1); // the last log term
+
+	if ((candidateLastLogTerm < localLastLogTerm) || \
 		(nodeState.votedFor != NULL))
 	{
 		sendVote(0, senderPort);
 	}
-	else if ((candidateTerm == nodeState.currentTerm) && \
-        candidateLastAppliedIndex >= nodeState.lastApplied)
+	else if ((candidateLastLogTerm == localLastLogTerm) && \
+        candidateLastLogIndex >= localLastLogIndex)
 	{
 		qDebug() << "Vote granted";
 		nodeState.votedFor = voteRequest.value("candidateId").toString();
@@ -245,7 +252,7 @@ void ChatDialog::handleHeartbeatTimeout()
 	qDebug() << "HEARTBEAT TIMEOUT OCCURED!!!";
 
 	// when trasitioning to candidate state, follower
-	nodeState.currentTerm ++;
+	nodeState.currentTerm++;
 
 	nodeStatus = CANDIDATE;
 
@@ -255,6 +262,7 @@ void ChatDialog::handleHeartbeatTimeout()
 	heartbeatTimer->stop();
 
 	sendRequestVoteRPC();
+    numberOfVotes++;
 
     heartbeatTimer->start(generateRandomTimeRange());
 
