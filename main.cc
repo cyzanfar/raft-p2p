@@ -137,11 +137,11 @@ void ChatDialog::processRequestVote(QMap<QString, QVariant> voteRequest, quint16
 
 void ChatDialog::sendVote(quint8 vote, quint16 senderPort)
 {
-	QMap<QString, QMap<QString, quint8>> voteToSend;
+	QMap<QString, QMap<QString, QVariant>> voteToSend;
 	QByteArray buffer;
 	QDataStream stream(&buffer,  QIODevice::ReadWrite);
 
-	voteToSend["VoteReply"]["vote"] = vote;
+	voteToSend["VoteReply"].insert("vote", vote);
 
 	stream << voteToSend;
 
@@ -291,7 +291,7 @@ void ChatDialog::handleHeartbeatTimeout()
 	sendRequestVoteRPC();
     numberOfVotes++;
 
-    heartbeatTimer->start(generateRandomTimeRange());
+//    heartbeatTimer->start(generateRandomTimeRange());
 
 //    requestVoteTimer->start(generateRandomTimeRange());
 }
