@@ -58,8 +58,8 @@ ChatDialog::ChatDialog()
 	heartbeatTimer = new QTimer(this);
 	connect(heartbeatTimer, SIGNAL(timeout()), this, SLOT(handleHeartbeatTimeout()));
 
-    requestVoteTimer = new QTimer(this);
-    connect(requestVoteTimer, SIGNAL(timeout()), this, SLOT(handleRequestVoteTimeout()));
+//    requestVoteTimer = new QTimer(this);
+//    connect(requestVoteTimer, SIGNAL(timeout()), this, SLOT(handleRequestVoteTimeout()));
 //	socket->pingList = socket->PeerList();
 
 	// Register a callback on the textline's returnPressed signal
@@ -151,7 +151,8 @@ void ChatDialog::sendVote(quint8 vote, quint16 senderPort)
 
 void ChatDialog::processAppendEntries(QMap<QString, QVariant> AppendEntries)
 {
-	// do
+	// do the check
+	// if valid leader set status to follower
 }
 
 // Process the message read from pending messages from sock
@@ -170,6 +171,9 @@ void ChatDialog::processIncomingData(QByteArray datagramReceived, NetSocket *soc
 	}
 	else if (messageReceived.contains("AppendEntries"))
 	{
+        QMap<QString, QMap<QString, QList<std::tuple<quint16, quint16, QString>>>> entries;
+
+
 		processAppendEntries(messageReceived.value("AppendEntries"));
 	}
 	else if (messageReceived.contains("VoteReply"))
@@ -221,25 +225,25 @@ void ChatDialog::sendRequestVoteRPC()
 	}
 }
 
-void ChatDialog::sendHeartbeat(quint16 port, QList<quint32>) {
-
-	QMap<QString, QMap<QString, QVariant>> heartBeatMap;
-	QByteArray buffer;
-	QDataStream stream(&buffer, QIODevice::ReadWrite);
-
-	QList<QMap<quint32, QMap<QString, QVariant>>> entries = [];
-
-	heartBeatMap["Heartbeat"].insert("term", nodeState.currentTerm);
-	heartBeatMap["Heartbeat"].insert("leaderId", nodeState.id);
-	heartBeatMap["Heartbeat"].insert("prevLogIndex", 0); //TODO check for server previndex
-	heartBeatMap["Heartbeat"].insert("prevLogTerm", 0); //TODO check for server prevterm
-	heartBeatMap["Heartbeat"].insert("entries", entries);
-	heartBeatMap["Heartbeat"].insert("leaderCommit", nodeState.commitIndex);
-
-	stream << heartBeatMap;
-
-	sendMessage(buffer, port);
-}
+//void ChatDialog::sendHeartbeat(quint16 port, QList<quint32>) {
+//
+//	QMap<QString, QMap<QString, QVariant>> heartBeatMap;
+//	QByteArray buffer;
+//	QDataStream stream(&buffer, QIODevice::ReadWrite);
+//
+//	QList<std::tuple<quint16, quint16, QString>> entries =[];
+//
+//	heartBeatMap["Heartbeat"].insert("term", nodeState.currentTerm);
+//	heartBeatMap["Heartbeat"].insert("leaderId", nodeState.id);
+//	heartBeatMap["Heartbeat"].insert("prevLogIndex", 0); //TODO check for server previndex
+//	heartBeatMap["Heartbeat"].insert("prevLogTerm", 0); //TODO check for server prevterm
+//	heartBeatMap["Heartbeat"].insert("entries", entries);
+//	heartBeatMap["Heartbeat"].insert("leaderCommit", nodeState.commitIndex);
+//
+//	stream << heartBeatMap;
+//
+//	sendMessage(buffer, port);
+//}
 
 int ChatDialog::getLastEntryFor(QList<std::tuple<quint16, quint16, QString>> logEntries, int pos)
 {
@@ -288,19 +292,19 @@ void ChatDialog::handleHeartbeatTimeout()
     requestVoteTimer->start(generateRandomTimeRange());
 }
 
-void ChatDialog::handleRequestVoteTimeout()
-{
-    qDebug() << "REQUESTVOTE TIMEOUT OCCURED!!!";
-
-    numberOfVotes = 0;
-
-    requestVoteTimer->stop();
-
-    sendRequestVoteRPC();
-
-    requestVoteTimer->start(generateRandomTimeRange());
-
-}
+//void ChatDialog::handleRequestVoteTimeout()
+//{
+//    qDebug() << "REQUESTVOTE TIMEOUT OCCURED!!!";
+//
+//    numberOfVotes = 0;
+//
+//    requestVoteTimer->stop();
+//
+//    sendRequestVoteRPC();
+//
+//    requestVoteTimer->start(generateRandomTimeRange());
+//
+//}
 
 void ChatDialog::gotReturnPressed()
 {
