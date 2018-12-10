@@ -7,9 +7,29 @@
 #include <QtNetwork/QUdpSocket>
 #include <QTimer>
 #include <QElapsedTimer>
+#include<tuple>
 
 // enum for state of a node
-enum node_state { FOLLOWER, CANDIDATE, LEADER };
+enum node_status { WAITING, FOLLOWER, CANDIDATE, LEADER };
+
+struct node_state {
+	int currentTerm; // init to zero
+	QString votedFor;
+	QString id;
+	QMap<quint32, QMap<QString, QVariant>> logEntries;
+
+	int commitIndex;
+	int lastApplied;
+	bool isLeader;
+	bool voteGranted; // TODO should this be a list for majority
+
+};
+
+struct leader_state {
+
+	QMap<QString, QVariant> nextIndex; // only present on leader
+	QMap<QString, QVariant> matchIndex; // only present on leader
+};
 
 
 class NetSocket : public QUdpSocket
@@ -48,10 +68,11 @@ public:
 	QMap<QString, quint32> localStatusMap;
 	QMap<quint16, QMap<QString, QVariant > > last_message_sent;
 	QList<quint16> neighborList;
-	QTimer *timer;
+	QTimer *heartbeatTimer;
 	QTimer *antiEntropyTimer;
 	QMap<QString, QMap<quint32, QMap<QString, QVariant> > > messageList;
 	void checkCommand(QString command);
+	void sendRequestVoteRPC();
 
 
 public slots:
@@ -65,7 +86,7 @@ private:
 	QLineEdit *textline;
 	void Ping(NetSocket *sock);
 	void processReceivedMessage(QMap<QString, QVariant> messageReceived,QHostAddress sender, quint16 senderPort);
-	void sendMessage(QByteArray buffer, quint16 port);
+	void sendMessage(QByteArray buffer, quint16 senderPort);
 	void sendRandomMessage(QByteArray buffer);
 	void processIncomingData(QByteArray datagramReceived, QHostAddress sender, quint16 senderPort, NetSocket *socket);
 	QByteArray serializeLocalMessage(QString messageText);

@@ -5,30 +5,21 @@
 #include <QApplication>
 #include <QDebug>
 #include <QDateTime>
-
+#include <random>
 #include "main.hh"
 
-enum node_state nodeState;
+enum node_status nodeStatus;
+struct node_state nodeState;
+struct leader_state leaderState;
+
 
 ChatDialog::ChatDialog()
 {
 
-	// Read-only text box where we display messages from everyone.
-	// This widget expands both horizontally and vertically.
 	textview = new QTextEdit(this);
 	textview->setReadOnly(true);
-
-	// Small text-entry box the user can enter messages.
-	// This widget normally expands only horizontally,
-	// leaving extra vertical space for the textview widget.
-	//
-	// You might change this into a read/write QTextEdit,
-	// so that the user can easily enter multi-line messages.
 	textline = new QLineEdit(this);
 
-	// Lay out the widgets to appear in the main window.
-	// For Qt widget and layout concepts see:
-	// http://doc.qt.nokia.com/4.7-snapshot/widgets-and-layouts.html
 	QVBoxLayout *layout = new QVBoxLayout();
 	layout->addWidget(textview);
 	layout->addWidget(textline);
@@ -39,30 +30,35 @@ ChatDialog::ChatDialog()
 	if (!socket->bind())
 		exit(1);
 
-	// Randomize local origin
-//	qsrand((uint) QDateTime::currentMSecsSinceEpoch());
-//	local_origin = QString::number(qrand());
-//	setWindowTitle(local_origin);
+	//	 Randomize local origin
+	qsrand((uint) QDateTime::currentMSecsSinceEpoch());
 
-	// // Initialize timer for message timeout
-//	timer = new QTimer(this);
-//	connect(timer, SIGNAL(timeout()), this, SLOT(timeoutHandler()));
-//
-//	antiEntropyTimer = new QTimer(this);
-//	connect(antiEntropyTimer, SIGNAL(timeout()), this, SLOT(antiEntropyHandler()));
-
-//	qDebug() << "Starting ANTIENTROPY timer";
-//	antiEntropyTimer->start(5000);
-
-	// Initialize user-defined variables
-//	currentSeqNum = 1;
-
-	socket->pingList = socket->PeerList();
+	local_origin = QString::number(qrand()) + socket->localPort();
+	setWindowTitle(local_origin);
 
 	qDebug() << "LOCAL ORIGIN: " << local_origin;
 
+	// set init currentTerm
+	nodeState.currentTerm = 0;
+
+	// set the nodes id
+	nodeState.id = local_origin;
+
 	// set waiting for a status to 0 (false) since instance just launched
-	nodeState = FOLLOWER;
+	nodeStatus = WAITING;
+
+	// last log applied to state
+	nodeState.lastApplied = 0;
+
+	// index of highest log entry known to be committed
+	nodeState.commitIndex = 0;
+
+
+	// // Initialize timer for heartbeat timeout
+	heartbeatTimer = new QTimer(this);
+	connect(heartbeatTimer, SIGNAL(timeout()), this, SLOT(timeoutHandler()));
+
+	socket->pingList = socket->PeerList();
 
 	// Register a callback on the textline's returnPressed signal
 	// so that we can send the message entered by the user.
@@ -71,8 +67,6 @@ ChatDialog::ChatDialog()
 
 	// Callback fired when message is received
 	connect(socket, SIGNAL(readyRead()), this, SLOT(readPendingMessages()));
-
-//	Ping(socket);
 	
 }
 
@@ -308,17 +302,15 @@ void ChatDialog::processIncomingData(
 
 	stream_msg >> messageReceived;
 
-	QMap<QString, QMap<QString, quint32>> peerWantMap;
-	QDataStream stream_want(&datagramReceived,  QIODevice::ReadOnly);
+	if (messageReceived.value("term") < nodeState.currentTerm) {
+		// reply false
+	}
 
-	stream_want >> peerWantMap;
+	if (nodeState.lastApplied <= messageReceived.value("lastLogIndex").toUInt()) {
+		// send message
+		nodeState.votedFor = messageReceived.value("candidateId").toString();
+	}
 
-	QMap<QString, QString> pingMap;
-	QDataStream stream_ping(&datagramReceived,  QIODevice::ReadOnly);
-	stream_ping >> pingMap;
-
-	// if we are still waiting for an ACK ignore everything else
-	// currentState.waitingForStatus == 0
 	if (messageReceived.contains("ChatText")) {
 		qDebug() << "messageReceived: " << messageReceived["ChatText"];
 		processReceivedMessage(messageReceived, sender, senderPort);
@@ -370,17 +362,44 @@ QByteArray ChatDialog::serializeMessage(QMap<QString, QVariant> messageToSend)
 	return buffer;
 }
 
+void ChatDialog::sendRequestVoteRPC()
+{
+	quint32 lastLogTerm = 0;
+
+	QVariantMap requestVoteMap;
+	requestVoteMap.insert("term", nodeState.currentTerm);
+	requestVoteMap.insert("candidateId", nodeState.id);
+	requestVoteMap.insert("lastLogIndex", nodeState.lastApplied);
+
+	QByteArray buffer;
+	QDataStream stream(&buffer,  QIODevice::ReadWrite);
+
+
+	if (nodeState.lastApplied != 0) {
+		lastLogTerm = nodeState.logEntries[nodeState.lastApplied]["Term"].toUInt();
+	}
+
+	requestVoteMap.insert("lastLogTerm", lastLogTerm);
+
+	stream << requestVoteMap;
+
+	QList<quint16> peerList = socket->PeerList();
+
+	for (int p = 0; p < peerList.size(); p++) {
+		sendMessage(buffer, p);
+	}
+
+
+}
+
 void ChatDialog::timeoutHandler()
 {
 	qDebug() << "TIMEOUT OCCURED!!!";
 
-	for (auto portNumber : last_message_sent.keys()) {
+	// Timeout occurred change state to CANDIDATE send RequestVote
+	nodeStatus = CANDIDATE;
 
-		sendMessage(serializeMessage(last_message_sent[portNumber]), portNumber);
-//		currentState.waitingForStatus = 0;
-	}
-
-	timer->stop();
+	heartbeatTimer->stop();
 }
 
 void ChatDialog::antiEntropyHandler() 
@@ -409,7 +428,7 @@ void ChatDialog::gotReturnPressed()
 //	currentState.waitingForStatus = 1;
 
 	// about to send a message from chat diaglog, start a timer
-	timer->start(1000);
+//	timer->start(1000);
 
 	sendRandomMessage(serializeLocalMessage(text));
 
@@ -422,10 +441,19 @@ void ChatDialog::gotReturnPressed()
 
 void ChatDialog::checkCommand(QString text) {
 
+	std::random_device rd; // obtain a random number from hardware
+	std::mt19937 eng(rd()); // seed the generator
+	std::uniform_int_distribution<> distr(150, 300); // define the range
 
 	if (text.contains("START", Qt::CaseSensitive)) {
 		qDebug() << "COMMAND START";
+
 		// change state to follower and start timer
+		nodeStatus = FOLLOWER;
+
+		// waiting for heartbeat
+		heartbeatTimer->start(distr(eng));
+
 		// if timer runs out change state to CANDIDATE
 		// else respond to heatbeats
 
@@ -480,14 +508,12 @@ void ChatDialog::getRandomNeighbor() {
 	}
 }
 
-void ChatDialog::sendMessage(QByteArray buffer,  quint16 senderPort)
+void ChatDialog::sendMessage(QByteArray buffer, quint16 senderPort)
 {
-	qDebug() << "Sending to port: " << senderPort;			
+	qDebug() << "Sending to port: " << senderPort;
+
 	socket->writeDatagram(buffer, buffer.size(), QHostAddress::LocalHost, senderPort);
 
-	// save last message sent to be resend on timeout
-	cacheLastSentMessage(senderPort, buffer);
-	
 }
 
 void ChatDialog::sendRandomMessage(QByteArray buffer)
