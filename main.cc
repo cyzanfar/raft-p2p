@@ -257,8 +257,7 @@ void ChatDialog::handleHeartbeatTimeout()
 	nodeStatus = CANDIDATE;
 
 	numberOfVotes = 0;
-
-
+	
 	heartbeatTimer->stop();
 
 	sendRequestVoteRPC();
