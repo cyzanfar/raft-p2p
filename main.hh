@@ -60,6 +60,7 @@ public:
 	QTimer *heartbeatTimer;
 	void checkCommand(QString command);
 	void sendRequestVoteRPC();
+	void sendHeartbeat();
 	void processRequestVote(QMap<QString, QVariant> voteRequest, quint16 senderPort);
 	void processAppendEntries(QMap<QString, QVariant> voteRequest);
 	void sendVote(quint8 vote, quint16 senderPort);
