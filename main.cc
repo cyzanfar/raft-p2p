@@ -56,8 +56,10 @@ ChatDialog::ChatDialog()
 
 	// // Initialize timer for heartbeat timeout
 	heartbeatTimer = new QTimer(this);
-	connect(heartbeatTimer, SIGNAL(timeout()), this, SLOT(timeoutHandler()));
+	connect(heartbeatTimer, SIGNAL(timeout()), this, SLOT(handleHeartbeatTimeout()));
 
+    requestVoteTimer = new QTimer(this);
+    connect(requestVoteTimer, SIGNAL(timeout()), this, SLOT(handleRequestVoteTimeout()));
 //	socket->pingList = socket->PeerList();
 
 	// Register a callback on the textline's returnPressed signal
@@ -153,6 +155,8 @@ void ChatDialog::processIncomingData(QByteArray datagramReceived, NetSocket *soc
 	QDataStream stream_msg(&datagramReceived,  QIODevice::ReadOnly);
 	stream_msg >> messageReceived;
 
+	qDebug() << "IN PROCESS DATA";
+
 	if (messageReceived.contains("RequestVote"))
 	{
 		processRequestVote(messageReceived.value("RequestVote"), senderPort);
@@ -236,9 +240,9 @@ int ChatDialog::getLastEntryFor(QList<std::tuple<quint16, quint16, QString>> log
     return response;
 }
 
-void ChatDialog::timeoutHandler()
+void ChatDialog::handleHeartbeatTimeout()
 {
-	qDebug() << "TIMEOUT OCCURED!!!";
+	qDebug() << "HEARTBEAT TIMEOUT OCCURED!!!";
 
 	// when trasitioning to candidate state, follower
 	nodeState.currentTerm ++;
@@ -247,9 +251,28 @@ void ChatDialog::timeoutHandler()
 
 	numberOfVotes = 0;
 
-    sendRequestVoteRPC();
 
 	heartbeatTimer->stop();
+
+	sendRequestVoteRPC();
+
+    heartbeatTimer->start(generateRandomTimeRange());
+
+    requestVoteTimer->start(generateRandomTimeRange());
+}
+
+void ChatDialog::handleRequestVoteTimeout()
+{
+    qDebug() << "REQUESTVOTE TIMEOUT OCCURED!!!";
+
+    numberOfVotes = 0;
+
+    requestVoteTimer->stop();
+
+    sendRequestVoteRPC();
+
+    requestVoteTimer->start(generateRandomTimeRange());
+
 }
 
 void ChatDialog::gotReturnPressed()
@@ -263,11 +286,16 @@ void ChatDialog::gotReturnPressed()
 	textline->clear();
 }
 
+int ChatDialog::generateRandomTimeRange()
+{
+    std::random_device rd; // obtain a random number from hardware
+    std::mt19937 eng(rd()); // seed the generator
+    std::uniform_int_distribution<> distr(150, 300); // define the range
+    return distr(eng);
+}
+
 void ChatDialog::checkCommand(QString text) {
 
-	std::random_device rd; // obtain a random number from hardware
-	std::mt19937 eng(rd()); // seed the generator
-	std::uniform_int_distribution<> distr(150, 300); // define the range
 
 	if (text.contains("START", Qt::CaseSensitive)) {
 		qDebug() << "COMMAND START";
@@ -275,8 +303,8 @@ void ChatDialog::checkCommand(QString text) {
 		// change state to follower and start timer
 		nodeStatus = FOLLOWER;
 
-		// waiting for heartbeat
-		heartbeatTimer->start(distr(eng));
+ 		// waiting for heartbeat
+		heartbeatTimer->start(generateRandomTimeRange());
 
 		// if timer runs out change state to CANDIDATE
 		// else respond to heatbeats
@@ -362,7 +390,7 @@ NetSocket::NetSocket()
 	// (which are quite possible).
 	// We use the range from 32768 to 49151 for this purpose.
 	myPortMin = 32768 + (getuid() % 4096)*4;
-	myPortMax = myPortMin + 3;
+	myPortMax = myPortMin + 4;
 }
 
 QList<quint16> NetSocket::PeerList()

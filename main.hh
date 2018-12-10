@@ -14,14 +14,13 @@ enum node_status { WAITING, FOLLOWER, CANDIDATE, LEADER };
 
 
 struct node_state {
-	int currentTerm; // init to 0
+	quint32 currentTerm; // init to 0
 	QString votedFor;
 	QString id; // init to node id
 	QList<std::tuple<quint16, quint16, QString>> logEntries; // empty on start
-	volatile int commitIndex; // init to 0
-	volatile int lastApplied; // init to 0
+	volatile quint32 commitIndex; // init to 0
+	volatile quint32 lastApplied; // init to 0
 	bool isLeader; // TODO init to false?
-	bool voteGranted; // TODO should this be a list for majority
 
 };
 
@@ -59,14 +58,17 @@ public:
 	QString local_origin;
 	QList<quint16> neighborList;
 	QTimer *heartbeatTimer;
+	QTimer *requestVoteTimer;
 	void processRequestVote(QMap<QString, QVariant> voteRequest, quint16 senderPort);
 	void processAppendEntries(QMap<QString, QVariant> AppendEntries);
 	void sendVote(quint8 vote, quint16 senderPort);
+	int generateRandomTimeRange();
 
 public slots:
 	void gotReturnPressed();
 	void readPendingMessages();
-	void timeoutHandler();
+	void handleHeartbeatTimeout();
+	void handleRequestVoteTimeout();
 
 private:
 	QTextEdit *textview;
