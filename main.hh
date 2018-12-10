@@ -14,12 +14,11 @@ enum node_status { WAITING, FOLLOWER, CANDIDATE, LEADER };
 
 struct node_state {
 	int currentTerm; // init to zero
-	QString votedFor;
+	QString votedFor = NULL;
 	QString id;
 	QMap<quint32, QMap<QString, QVariant>> logEntries;
-
-	int commitIndex;
-	int lastApplied;
+	volatile int commitIndex;
+	volatile int lastApplied;
 	bool isLeader;
 	bool voteGranted; // TODO should this be a list for majority
 
@@ -37,22 +36,15 @@ class NetSocket : public QUdpSocket
 	Q_OBJECT
 
 	public:
-		QList<quint16> pingList;
-		QMap<quint16, int> pingTimes;
-		QElapsedTimer pingTimer;
 		NetSocket();
 		QList<quint16> PeerList();
 		void sendPingMessage(QHostAddress sendto, quint16 port);
-		void sendStatusMessage(QHostAddress sendto, quint16 port, QMap<QString, quint32> localStatusMap);
-		void processPingMessage(QHostAddress sender, quint16 senderPort);
-		void processPingReply(quint16 senderPort, QList<quint16> neighborList);
 
-		// Bind this socket to a P2Papp-specific default port.
+		void sendStatusMessage(QHostAddress sendto, quint16 port, QMap<QString, quint32> localStatusMap);
 		bool bind();
 
 	private:
 		int myPortMin, myPortMax;
-		void sendPingReply(QHostAddress sendto, quint16 port);
 };
 
 
@@ -63,17 +55,14 @@ class ChatDialog : public QDialog
 public:
 	ChatDialog();
 	NetSocket *socket;
-	quint32 currentSeqNum;
 	QString local_origin;
-	QMap<QString, quint32> localStatusMap;
-	QMap<quint16, QMap<QString, QVariant > > last_message_sent;
 	QList<quint16> neighborList;
 	QTimer *heartbeatTimer;
-	QTimer *antiEntropyTimer;
-	QMap<QString, QMap<quint32, QMap<QString, QVariant> > > messageList;
 	void checkCommand(QString command);
 	void sendRequestVoteRPC();
-
+	void processRequestVote(QMap<QString, QVariant> voteRequest, quint16 senderPort);
+	void processAppendEntries(QMap<QString, QVariant> voteRequest);
+	void sendVote(quint8 vote, quint16 senderPort);
 
 public slots:
 	void gotReturnPressed();
@@ -88,7 +77,7 @@ private:
 	void processReceivedMessage(QMap<QString, QVariant> messageReceived,QHostAddress sender, quint16 senderPort);
 	void sendMessage(QByteArray buffer, quint16 senderPort);
 	void sendRandomMessage(QByteArray buffer);
-	void processIncomingData(QByteArray datagramReceived, QHostAddress sender, quint16 senderPort, NetSocket *socket);
+	void processIncomingData(QByteArray datagramReceived, NetSocket *socket, quint16 senderPort);
 	QByteArray serializeLocalMessage(QString messageText);
 	QByteArray serializeMessage(QMap<QString, QVariant> messageToSend);
 	void processStatusMessage(QMap<QString, QMap<QString, quint32> > peerWantMap, QHostAddress sender, quint16 senderPort);
