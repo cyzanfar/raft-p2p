@@ -114,8 +114,8 @@ void ChatDialog::processRequestVote(QMap<QString, QVariant> voteRequest, quint16
 	else if ((candidateTerm == nodeState.currentTerm) && \
         candidateLastAppliedIndex >= nodeState.lastApplied)
 	{
+		qDebug() << "Vote granted";
 		nodeState.votedFor = voteRequest.value("candidateId").toString();
-
 		sendVote(1, senderPort);
 
 	}
@@ -128,11 +128,11 @@ void ChatDialog::processRequestVote(QMap<QString, QVariant> voteRequest, quint16
 
 void ChatDialog::sendVote(quint8 vote, quint16 senderPort)
 {
-	QMap<QString, quint8> voteToSend;
+	QMap<QString, QMap<QString, quint8>> voteToSend;
 	QByteArray buffer;
 	QDataStream stream(&buffer,  QIODevice::ReadWrite);
 
-	voteToSend["VoteReply"] = vote;
+	voteToSend["VoteReply"]["vote"] = vote;
 
 	stream << voteToSend;
 
@@ -140,7 +140,7 @@ void ChatDialog::sendVote(quint8 vote, quint16 senderPort)
 
 }
 
-void ChatDialog::processAppendEntries(QMap<QString, QVariant> voteRequest)
+void ChatDialog::processAppendEntries(QMap<QString, QVariant> AppendEntries)
 {
 	// do
 }
@@ -161,35 +161,35 @@ void ChatDialog::processIncomingData(QByteArray datagramReceived, NetSocket *soc
 	{
 		processAppendEntries(messageReceived.value("AppendEntries"));
 	}
+	else if (messageReceived.contains("VoteReply"))
+	{
+        addVoteCount((quint8)messageReceived["VoteReply"]["vote"].toUInt());
+	}
 	else {
 		qDebug() << "Unsupported message RPC type";
 	}
 }
-/*
-QByteArray ChatDialog::serializeLocalMessage(QString messageText)
+
+
+void ChatDialog::addVoteCount(quint8 vote)
 {
+     numberOfVotes += vote;
 
-}*/
+     // we know there are 5 nodes
+     if (numberOfVotes >= 3)
+     {
+        // become leader and send heartbeat
 
-QByteArray ChatDialog::serializeMessage(QMap<QString, QVariant> messageToSend)
-{
-	QVariantMap messageMap;
+        // set vote to 0
+        numberOfVotes = 0;
+        // set status to LEADER
+        nodeStatus = LEADER;
 
-	messageMap.insert("ChatText", messageToSend.value("ChatText"));
-	messageMap.insert("Origin", messageToSend.value("Origin"));
-	messageMap.insert("SeqNo", messageToSend.value("SeqNo"));
-
-	QByteArray buffer;
-	QDataStream stream(&buffer,  QIODevice::ReadWrite);
-
-	stream << messageMap;
-
-	return buffer;
+     }
 }
 
 void ChatDialog::sendRequestVoteRPC()
 {
-	quint32 lastLogTerm = 0;
 
 	QMap<QString, QMap<QString, QVariant>> requestVoteMap;
 	QByteArray buffer;
@@ -197,14 +197,9 @@ void ChatDialog::sendRequestVoteRPC()
 
 	requestVoteMap["RequestVote"].insert("term", nodeState.currentTerm);
 	requestVoteMap["RequestVote"].insert("candidateId", nodeState.id);
-	requestVoteMap["RequestVote"].insert("lastLogIndex", nodeState.lastApplied);
-	requestVoteMap["RequestVote"].insert("lastLogTerm", nodeState.lastApplied);
 
-	if (nodeState.lastApplied != 0) {
-		lastLogTerm = nodeState.logEntries[nodeState.lastApplied]["Term"].toUInt();
-	}
-
-	requestVoteMap["RequestVote"].insert("lastLogTerm", lastLogTerm);
+	requestVoteMap["RequestVote"].insert("lastLogIndex", getLastEntryFor(nodeState.logEntries, 0));
+	requestVoteMap["RequestVote"].insert("lastLogTerm", getLastEntryFor(nodeState.logEntries, 1));
 
 	stream << requestVoteMap;
 
@@ -215,13 +210,44 @@ void ChatDialog::sendRequestVoteRPC()
 	}
 }
 
+int ChatDialog::getLastEntryFor(QList<std::tuple<quint16, quint16, QString>> logEntries, int pos)
+{
+	std::tuple<quint16, quint16, QString> entry;
+
+	int response = 0;
+
+	if (!logEntries.isEmpty())
+	{
+		entry = logEntries.first();
+		switch(pos)
+		{
+		    case 0:
+		        response = std::get<0>(entry);
+		        break;
+		    case 1:
+                response = std::get<1>(entry);
+		        break;
+		    default:
+		        break;
+
+		}
+	}
+
+    return response;
+}
+
 void ChatDialog::timeoutHandler()
 {
 	qDebug() << "TIMEOUT OCCURED!!!";
 
 	// when trasitioning to candidate state, follower
 	nodeState.currentTerm ++;
+
 	nodeStatus = CANDIDATE;
+
+	numberOfVotes = 0;
+
+    sendRequestVoteRPC();
 
 	heartbeatTimer->stop();
 }
