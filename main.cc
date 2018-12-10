@@ -137,11 +137,11 @@ void ChatDialog::processRequestVote(QMap<QString, QVariant> voteRequest, quint16
 
 void ChatDialog::sendVote(quint8 vote, quint16 senderPort)
 {
-	QMap<QString, QMap<QString, quint8>> voteToSend;
+	QMap<QString, QMap<QString, QVariant>> voteToSend;
 	QByteArray buffer;
 	QDataStream stream(&buffer,  QIODevice::ReadWrite);
 
-	voteToSend["VoteReply"]["vote"] = vote;
+	voteToSend["VoteReply"].insert("vote", vote);
 
 	stream << voteToSend;
 
@@ -160,7 +160,7 @@ void ChatDialog::processIncomingData(QByteArray datagramReceived, NetSocket *soc
 {
 
 	QMap<QString, QMap<QString, QVariant>> messageReceived;
-	QDataStream stream_msg(&datagramReceived,  QIODevice::ReadOnly);
+	QDataStream stream_msg(&datagramReceived,  QIODevice::ReadWrite);
 	stream_msg >> messageReceived;
 
 	qDebug() << "IN PROCESS DATA";
