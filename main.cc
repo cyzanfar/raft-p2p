@@ -160,7 +160,7 @@ void ChatDialog::processIncomingData(QByteArray datagramReceived, NetSocket *soc
 {
 
 	QMap<QString, QMap<QString, QVariant>> messageReceived;
-	QDataStream stream_msg(&datagramReceived,  QIODevice::ReadOnly);
+	QDataStream stream_msg(&datagramReceived,  QIODevice::ReadWrite);
 	stream_msg >> messageReceived;
 
 	qDebug() << "IN PROCESS DATA";
