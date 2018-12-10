@@ -9,6 +9,7 @@
 #include <QElapsedTimer>
 #include<tuple>
 
+//#define REQUEST_VOTE ""
 // enum for status of a node
 enum node_status { WAITING, FOLLOWER, CANDIDATE, LEADER };
 
@@ -58,8 +59,6 @@ public:
 	QString local_origin;
 	QList<quint16> neighborList;
 	QTimer *heartbeatTimer;
-	void checkCommand(QString command);
-	void sendRequestVoteRPC();
 	void sendHeartbeat();
 	QTimer *requestVoteTimer;
 	void processRequestVote(QMap<QString, QVariant> voteRequest, quint16 senderPort);
@@ -71,7 +70,7 @@ public slots:
 	void gotReturnPressed();
 	void readPendingMessages();
 	void handleHeartbeatTimeout();
-	void handleRequestVoteTimeout();
+//	void handleRequestVoteTimeout();
 
 private:
 	QTextEdit *textview;

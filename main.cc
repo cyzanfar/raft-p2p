@@ -165,8 +165,11 @@ void ChatDialog::processIncomingData(QByteArray datagramReceived, NetSocket *soc
 
 	qDebug() << "IN PROCESS DATA";
 
+	qDebug() << messageReceived;
+
 	if (messageReceived.contains("RequestVote"))
 	{
+        qDebug() << "received request vote";
 		processRequestVote(messageReceived.value("RequestVote"), senderPort);
 	}
 	else if (messageReceived.contains("AppendEntries"))
@@ -197,6 +200,7 @@ void ChatDialog::addVoteCount(quint8 vote)
 
         // set vote to 0
         numberOfVotes = 0;
+        qDebug() << "BECAME FUCKING LEADER";
         // set status to LEADER
         nodeStatus = LEADER;
 
@@ -221,7 +225,7 @@ void ChatDialog::sendRequestVoteRPC()
 	QList<quint16> peerList = socket->PeerList();
 
 	for (int p = 0; p < peerList.size(); p++) {
-		sendMessage(buffer, p);
+		sendMessage(buffer, peerList[p]);
 	}
 }
 
@@ -289,7 +293,7 @@ void ChatDialog::handleHeartbeatTimeout()
 
     heartbeatTimer->start(generateRandomTimeRange());
 
-    requestVoteTimer->start(generateRandomTimeRange());
+//    requestVoteTimer->start(generateRandomTimeRange());
 }
 
 //void ChatDialog::handleRequestVoteTimeout()
