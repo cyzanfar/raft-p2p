@@ -33,6 +33,18 @@ struct leader_state {
 	QMap<QString, QVariant> matchIndex; // init to 0
 };
 
+class AppendEntryRPC : public QObject {
+	Q_OBJECT
+
+	public:
+		quint32 term;
+		QString leaderId;
+		quint32 prevLogIndex;
+		quint32 prevLogTerm;
+		QMap<quint32, QMap<QString, QVariant>> entries;
+		quint32 leaderCommit;
+};
+
 
 class NetSocket : public QUdpSocket
 {
@@ -61,7 +73,7 @@ public:
 	QString local_origin;
 	QList<quint16> neighborList;
 	QTimer *heartbeatTimer;
-	void sendHeartbeat();
+	void sendHeartbeat(quint16 port, QList<quint32>);
 	QTimer *electionTimeout;
 	void processRequestVote(QMap<QString, QVariant> voteRequest, quint16 senderPort);
 	void processAppendEntries(
