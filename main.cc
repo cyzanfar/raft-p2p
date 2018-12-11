@@ -168,7 +168,7 @@ void ChatDialog::processAppendEntries(
 	QDataStream stream(&buffer, QIODevice::ReadWrite);
 
 
-	if ((nodeStatus == CANDIDATE)
+	if (nodeStatus == CANDIDATE)
 	{
 
 		if (rcvTerm >= nodeState.currentTerm)
@@ -183,9 +183,9 @@ void ChatDialog::processAppendEntries(
 	{
 		// reply false -> leader update its currenterm to 
 		// rcv term and set itself to follower
-		ackToSend["ACK"].insert("originid", nodeState.id)
+		ackToSend["ACK"].insert("originid", nodeState.id);
 		ackToSend["ACK"].insert("term", nodeState.currentTerm);
-		ackToSent["ACK"].insert("success", 0);
+		ackToSend["ACK"].insert("success", 0);
 
 		stream << ackToSend;
 		
@@ -194,8 +194,10 @@ void ChatDialog::processAppendEntries(
 		return;
 	}
 
-	if (nodeState.logEntries.contains(rcvPrevLogIndex) {
-		QList<quint32, QString> localEntry;
+	if (nodeState.logEntries.contains(rcvPrevLogIndex)) {
+
+		QMap<QString, QVariant> localEntry;
+
 		localEntry = nodeState.logEntries[rcvPrevLogIndex];
 		
 		if (rcvPrevLogTerm != localEntry["term"]) 
@@ -207,10 +209,10 @@ void ChatDialog::processAppendEntries(
 
 			stream << ackToSend;
 			
-			sendMessage(buffer, port);
+			sendMessage(buffer, senderPort);
 
-			for (int i = rcvPrevLogIndex; i <= nodeState.lastApplied; i++) {
-				logEntries.erase(i);
+			for (quint32 i = rcvPrevLogIndex; i <= nodeState.lastApplied; i++) {
+				nodeState.logEntries.remove(i);
 			}
 
 			nodeState.lastApplied = rcvPrevLogIndex-1;
@@ -221,29 +223,28 @@ void ChatDialog::processAppendEntries(
 			if (!entries.isEmpty()){
 				for (int e = 0; e < entries.size(); e++){
 					for (auto index : entries.keys()) {
-						logEntries[index] = entries[index];
+						nodeState.logEntries[index] = entries[index];
 					}
 				}
 
 				ackToSend["ACK"].insert("originid", nodeState.id);
 				ackToSend["ACK"].insert("term", nodeState.currentTerm);
-				ackToSent["ACK"].insert("success", 1);
+				ackToSend["ACK"].insert("success", 1);
 
 				stream << ackToSend;
 				
-				sendMessage(buffer, port);
+				sendMessage(buffer, senderPort);
 			}
 		}
 	}
 
-	//
-	if (rcvCommit > nodeState.commitIndex) 
+	if (rcvCommitIndex > nodeState.commitIndex)
 	{
-		if (rcvCommit > nodeState.lastApplied) {
+		if (rcvCommitIndex > nodeState.lastApplied) {
 			nodeState.commitIndex = nodeState.lastApplied;
 		}
 		else {
-			nodeState.commitIndex = rcvCommit;
+			nodeState.commitIndex = rcvCommitIndex;
 		}
 	}
 }
@@ -268,11 +269,15 @@ void ChatDialog::processIncomingData(QByteArray datagramReceived, NetSocket *soc
 	{
 		qDebug() << "MESSAGE CONTAINS APPEND_ENTRIES";
 
-		QMap<QString, QMap<QString, QMap<quint32, QMap<QString, QVariant>>>> entries;
-		QDataStream stream_msg(&datagramReceived,  QIODevice::ReadWrite);
-		stream_msg >> entries;
-		
-		processAppendEntries(entries.value("AppendEntries"), senderPort);
+		QMap<QString, QMap<QString, QMap<quint32 , QMap<QString, QVariant>>>> appendEntryMessage;
+		QDataStream entries_msg(&datagramReceived,  QIODevice::ReadWrite);
+		entries_msg >> appendEntryMessage;
+
+		processAppendEntries(
+				messageReceived.value("AppendEntries"),
+				appendEntryMessage["AppendEntries"].value("entries"),
+				senderPort);
+
 	}
 	else if (messageReceived.contains("VoteReply"))
 	{
@@ -280,7 +285,9 @@ void ChatDialog::processIncomingData(QByteArray datagramReceived, NetSocket *soc
 
         addVoteCount((quint8)messageReceived["VoteReply"]["vote"].toUInt());
 	}
-	else if (messageReceived.constains("ACK")
+
+	else if (messageReceived.contains("ACK"))
+
 	{
 		processACK(messageReceived.value("ACK"), senderPort);
 	}
@@ -291,8 +298,8 @@ void ChatDialog::processIncomingData(QByteArray datagramReceived, NetSocket *soc
 
 void ChatDialog::processACK(QMap<QString, QVariant> ack, quint16 senderPort)
 {
-	int rcvAckTerm = ack.value("term").toUInt();
-	int rcvAckSuccess = ack.value("success").toUInt();
+	quint32 rcvAckTerm = ack.value("term").toUInt();
+	quint32 rcvAckSuccess = ack.value("success").toUInt();
 	// • If command received from client: append entry to local log, respond after entry applied to state machine (§5.3)
 	// • If last log index ≥ nextIndex for a follower: send AppendEntries RPC with log entries starting at nextIndex
 	// • If successful: update nextIndex and matchIndex for
@@ -304,13 +311,13 @@ void ChatDialog::processACK(QMap<QString, QVariant> ack, quint16 senderPort)
 
 
 	QString candidateId = ack.value("candidateId").toString();
-	quint32 candidateNextIndex =  leaderState.nextIndex.value(candidateId)
+	quint32 candidateNextIndex =  leaderState.nextIndex.value(candidateId).toUInt();
 	
 
 	if ((rcvAckTerm > nodeState.currentTerm) && (rcvAckSuccess == 0))
 	{
 		// BECOME follower
-		nodeStatus = FOLLLOWER;
+		nodeStatus = FOLLOWER;
 		nodeState.currentTerm = rcvAckTerm;
 		return;		
 	}
@@ -331,15 +338,18 @@ void ChatDialog::processACK(QMap<QString, QVariant> ack, quint16 senderPort)
 		appendEntry.prevLogTerm = getLastTerm();
 		appendEntry.leaderCommit = nodeState.commitIndex;
 
-
-		for (int i = leaderState.nextIndex[candidateId]; i <= nodeState.lastApplied; i++) {
+		
+		for (int i = leaderState.nextIndex[candidateId].toUInt(); i <= nodeState.lastApplied; i++)
+		{
 			appendEntry.entries.insert("term", nodeState.logEntries[i].value("term"));
 			appendEntry.entries.insert("command", nodeState.logEntries[i].value("command"));
 		}
 
+
 		appendEntryToSend.insert("AppendEntries", appendEntry);
 
 		stream << appendEntryToSend;
+
 		sendMessage(buffer, senderPort);
 		
 	}
@@ -425,9 +435,9 @@ int ChatDialog::getLastTerm()
 {
 	int response = 0;
 
-	if (!logEntries.isEmpty())
+	if (!nodeState.logEntries.isEmpty())
 	{
-		response = logEntries[nodeState.lastApplied].value("term")
+		response = nodeState.logEntries[nodeState.lastApplied].value("term")
 	}
 
     return response;
@@ -446,7 +456,7 @@ void ChatDialog::handleHeartbeatTimeout()
 	
 	heartbeatTimer->stop();
 
-	nodeState.votedFor = nodeState.candidateId;
+	nodeState.votedFor = nodeState.id;
 
 	sendRequestVoteRPC();
 	

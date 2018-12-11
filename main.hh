@@ -100,4 +100,12 @@ private:
 	int getLastEntryFor();
 };
 
+class AppendEntryRPC: public QObject
+{
+    Q_OBJECT;
+public:
+
+};
+
+
 #endif // P2PAPP_MAIN_HH
