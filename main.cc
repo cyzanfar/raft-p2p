@@ -62,7 +62,7 @@ ChatDialog::ChatDialog()
 
    	electionTimeout = new QTimer(this);
    	connect(electionTimeout, SIGNAL(timeout()), this, SLOT(handleElectionTimeout()));
-	socket->pingList = socket->PeerList();
+	// socket->pingList = socket->PeerList();
 
 	// Register a callback on the textline's returnPressed signal
 	// so that we can send the message entered by the user.
@@ -112,11 +112,11 @@ void ChatDialog::processRequestVote(QMap<QString, QVariant> voteRequest, quint16
 	quint32 candidateLastLogIndex = voteRequest.value("lastLogIndex").toUInt();
     quint32 candidateLastLogTerm = voteRequest.value("lastLogTerm").toUInt();
 
-    int localLastLogIndex = noteState.lastApplied; // the last log index
+    int localLastLogIndex = nodeState.lastApplied; // the last log index
     int localLastLogTerm = getLastEntryFor(); // the last log index
 
     
-	if ((candidateTerm == nodeState.currentTerm) && (nodeState.votedFor != NULL)
+	if ((candidateTerm == nodeState.currentTerm) && (nodeState.votedFor != NULL))
 	{
 		sendVote(0, senderPort);
 	}
@@ -158,13 +158,13 @@ void ChatDialog::sendVote(quint8 vote, quint16 senderPort)
 
 }
 
-void ChatDialog::processAppendEntries(QMap<QString, QMap<String, QVariant>> appendEntries, quint16 port)
+void ChatDialog::processAppendEntries(QMap<QString, QVariant> appendEntries, quint16 port)
 {
-	uint32 rcvTerm = appendEntries.value("term");
+	quint32 rcvTerm = appendEntries.value("term");
 	QString rcvId = appendEntries.value("id");
 	quint32 rcvPrevLogIndex = appendEntries.value("prevLogIndex");
 	quint32 rcvPrevLogTerm = appendEntries.value("prevLogTerm");
-	QMap<quint32, QMap<QString, QVariant>> entries = appendEntries.value("entries");
+	QMap<quint32, QMap<QString, QVariant>> entries = appendEntries["AppendEntries"].value("entries");
 	quint32 rcvCommitIndex = appendEntries.value("leaderCommit");
 
 	// build response from append entries
@@ -274,9 +274,9 @@ void ChatDialog::processIncomingData(QByteArray datagramReceived, NetSocket *soc
 
 		QMap<QString, QMap<QString, QMap<QString, QVariant>>> entries;
 		QDataStream stream_msg(&datagramReceived,  QIODevice::ReadWrite);
-		entries_msg >> entries;
+		stream_msg >> entries;
 		
-		processAppendEntries(entries.value("AppendEntries"));
+		processAppendEntries(entries.value("AppendEntries"), senderPort);
 	}
 	else if (messageReceived.contains("VoteReply"))
 	{
@@ -284,16 +284,16 @@ void ChatDialog::processIncomingData(QByteArray datagramReceived, NetSocket *soc
 
         addVoteCount((quint8)messageReceived["VoteReply"]["vote"].toUInt());
 	}
-	else if (messageReceived.constains("ACK"))
+	else if (messageReceived.constains("ACK")
 	{
-		processACK(messageReceived.value("ACK"), senderPort)
+		processACK(messageReceived.value("ACK"), senderPort);
 	}
 	else {
 		qDebug() << "Unsupported message RPC type";
 	}
 }
 
-void ChatDialog::processACK(QMap<QString, QVariant> ack)
+void ChatDialog::processACK(QMap<QString, QVariant> ack, quint16 senderPort)
 {
 	int rcvAckTerm = ack.value("term").toUInt();
 	int rcvAckSuccess = ack.value("success").toUInt();
@@ -411,7 +411,7 @@ void ChatDialog::sendHeartbeat(quint16 port, QList<quint32>) {
 	QByteArray buffer;
 	QDataStream stream(&buffer, QIODevice::ReadWrite);
 
-	QMap<quint32, QMap<QString, QVariant>> entries = [];
+	QMap<quint32, QMap<QString, QVariant>> entries;
 
 	heartBeatMap["AppendEntries"].insert("term", nodeState.currentTerm);
 	heartBeatMap["AppendEntries"].insert("leaderId", nodeState.id);
@@ -513,16 +513,16 @@ void ChatDialog::checkCommand(QString text) {
 
 	}
 	else if (text.contains("MSG", Qt::CaseSensitive)) {
-		QVariantMap messageMap;
+		QMap<>QVariantMap logItem;
 
-		messageMap.insert("ChatText", messageToSend.value("ChatText"));
-		messageMap.insert("Origin", messageToSend.value("Origin"));
-		messageMap.insert("SeqNo", messageToSend.value("SeqNo"));
+		logItem.insert("command", "MSG");
+		logItem.insert("term", nodeState.currentTerm);
+//		messageMap.insert("Origin", messageToSend.value("Origin"));
 
 		QByteArray buffer;
 		QDataStream stream(&buffer,  QIODevice::ReadWrite);
 
-		stream << messageMap;
+		stream << logItem;
 
 		qDebug() << "COMMAND MSG";
 
