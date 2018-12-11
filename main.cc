@@ -31,9 +31,9 @@ ChatDialog::ChatDialog()
 		exit(1);
 
 	//	 Randomize local origin
-	qsrand((uint) QDateTime::currentMSecsSinceEpoch());
-
-	local_origin = QString::number(qrand()) + socket->localPort();
+//	qsrand((uint) QDateTime::currentMSecsSinceEpoch());
+//QString::number(qrand()) +
+	local_origin = socket->localPort();
 	setWindowTitle(local_origin);
 
 	qDebug() << "LOCAL ORIGIN: " << local_origin;
@@ -510,58 +510,107 @@ void ChatDialog::checkCommand(QString text) {
 
 	}
 	else if (text.contains("MSG", Qt::CaseSensitive)) {
-		QMap<QString, QVariant> logItem;
-
-		logItem.insert("command", "MSG");
-		logItem.insert("term", nodeState.currentTerm);
-
-		QByteArray buffer;
-		QDataStream stream(&buffer,  QIODevice::ReadWrite);
-
-		stream << logItem;
-
 		qDebug() << "COMMAND MSG";
 
-		if (nodeState.leaderPort != NULL){
-			sendMessage(buffer, nodeState.leaderPort);
-		}
-		else {
-			QList<quint16> peerList = socket->PeerList();
-
-			quint16 randomPeer = generateRandomTimeRange(peerList[0], peerList[peerList.size()-1]);
-			
-			sendMessage(buffer, peerList[p]);
-		}
+		processMessageReceived(text);
 	}
 	else if (text.contains("GET_CHAT", Qt::CaseSensitive)) {
 		// Print current chat history of the selected node
 		qDebug() << "COMMAND GET_CHAT";
 
+		// iterate through our chat log and print it to the dialog window
+
 	}
 	else if (text.contains("STOP", Qt::CaseSensitive)) {
+
 		qDebug() << "COMMAND STOP";
 
 	}
 	else if (text.contains("DROP", Qt::CaseSensitive)) {
 		qDebug() << "COMMAND DROP";
 
-		// Drop incoming packets from specified node
+		processDropNode(text);
+
 	}
 	else if (text.contains("RESTORE", Qt::CaseSensitive)) {
 		qDebug() << "COMMAND RESTORE";
 
-		// Restore (reverse drop) to accept packets from specified node
+		restoreDropppedNode(text);
+
 	}
 	else if (text.contains("GET_NODES", Qt::CaseSensitive)) {
 		qDebug() << "COMMAND GET_NODES";
-		// Get all node ids
-		// show raft state, if leader elected, show id
-		// State of current node
+		getNodeCommand();
 	}
 	else {
 		qDebug() << "Did not recognize valid command";
 	}
 	return;
+}
+
+void ChatDialog::processMessageReceived(QString messageReceived)
+{
+	QMap<QString, QVariant> logItem;
+
+	messageReceived.replace("MSG", "",  Qt::CaseSensitive); // remove the command from the actual message
+
+
+	logItem.insert("command", "MSG"); // TODO what is this for?
+
+	logItem.insert("term", nodeState.currentTerm);
+
+	logItem.insert("message", messageReceived); // this is the actual message text
+
+	QByteArray buffer;
+	QDataStream stream(&buffer,  QIODevice::ReadWrite);
+
+	stream << logItem;
+
+
+	if (nodeState.leaderPort != NULL){
+		sendMessage(buffer, nodeState.leaderPort);
+	}
+	else {
+		QList<quint16> peerList = socket->PeerList();
+
+		quint16 randomPeer = generateRandomTimeRange(peerList[0], peerList[peerList.size()-1]);
+
+		sendMessage(buffer, peerList[randomPeer]);
+	}
+}
+void ChatDialog::processDropNode(QString dropNodeMessage)
+{
+	QStringList str;
+
+	str = dropNodeMessage.split(" ");
+
+	droppedNodes.append(str[1]);
+
+	qDebug() << "Dropped node_id: " << str[1];
+}
+
+void ChatDialog::restoreDropppedNode(QString restoreNodeMessage)
+{
+	QStringList str;
+
+	str = restoreNodeMessage.split(" ");
+
+	int indexOfNodeToRestore = droppedNodes.indexOf(str[1]);
+
+	droppedNodes.removeAt(indexOfNodeToRestore);
+
+	qDebug() << "Restored node_id: " << str[1];
+}
+
+void ChatDialog::getNodeCommand()
+{
+	qDebug() << "node ids: " << socket->PeerList();
+	qDebug() << "WAITING 0, FOLLOWER 1, CANDIDATE 2, LEADER 3";
+	qDebug() << "Current State: " << nodeStatus;
+	if (nodeState.leaderPort != NULL)
+	{
+		qDebug() << "Leader id: " << nodeState.leaderPort;
+	}
 }
 
 void ChatDialog::sendMessage(QByteArray buffer, quint16 senderPort)

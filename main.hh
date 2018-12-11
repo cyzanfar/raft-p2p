@@ -75,7 +75,7 @@ public:
 	ChatDialog();
 	NetSocket *socket;
 	QString local_origin;
-	QList<quint16> neighborList;
+	QList<QString> droppedNodes;
 	QTimer *heartbeatTimer;
 	void sendHeartbeat(quint16 port, QList<quint32>);
 	QTimer *electionTimeout;
@@ -100,8 +100,11 @@ private:
 	void sendMessage(QByteArray buffer, quint16 senderPort);
 	void processIncomingData(QByteArray datagramReceived, NetSocket *socket, quint16 senderPort);
 	void processACK(QMap<QString, QVariant> ack, quint16 senderPort);
-
+    void getNodeCommand();
 	int getLastTerm();
+	void processDropNode(QString dropNodeMessage);
+	void restoreDropppedNode(QString restoreNodeMessage);
+	void processMessageReceived(QString messageReceived);
 };
 
 
