@@ -622,37 +622,6 @@ void ChatDialog::sendMessage(QByteArray buffer, quint16 senderPort)
 
 }
 
-void NetSocket::sendPingMessage(QHostAddress sendto, quint16 port)
-{
-	QByteArray ping;
-	QDataStream stream(&ping,  QIODevice::ReadWrite);
-	
-	QMap<QString, QString> pingMsg;
-	pingMsg["Ping"] = "Ping";
-
-	stream << pingMsg;
-
-	this->writeDatagram(ping, ping.size(), sendto, port);
-}
-
-
-void NetSocket::sendStatusMessage(QHostAddress sendto, quint16 port, QMap<QString, quint32> localStatusMap)
-{
-	QByteArray buffer;
-	QDataStream stream(&buffer,  QIODevice::ReadWrite);
-	QMap<QString, QMap<QString, quint32>> statusMessage;
-
-	// Define message QMap
-	statusMessage["Want"] = localStatusMap;
-
-	qDebug() << "\nSending statusMessage: " << statusMessage;
-	qDebug() << "sending status to peer: " << port;
-
-	stream << statusMessage;
-
-	this->writeDatagram(buffer, buffer.size(), sendto, port);
-}
-
 NetSocket::NetSocket()
 {
 	// Pick a range of four UDP ports to try to allocate by default,

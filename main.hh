@@ -57,9 +57,6 @@ class NetSocket : public QUdpSocket
 	public:
 		NetSocket();
 		QList<quint16> PeerList();
-		void sendPingMessage(QHostAddress sendto, quint16 port);
-
-		void sendStatusMessage(QHostAddress sendto, quint16 port, QMap<QString, quint32> localStatusMap);
 		bool bind();
 
 	private:
