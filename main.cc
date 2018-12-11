@@ -86,7 +86,7 @@ void ChatDialog::readPendingMessages()
 		socket->readDatagram(datagram.data(), datagram.size(),
 								&sender, &senderPort);
 
-		qDebug() << "\nRECEIVING MESSAGE";
+		qDebug() << "RECEIVING MESSAGE";
 
 		processIncomingData(datagram, socket, senderPort);
 	}
@@ -107,7 +107,6 @@ void ChatDialog::processRequestVote(QMap<QString, QVariant> voteRequest, quint16
 
     int localLastLogIndex = nodeState.lastApplied; // the last log index
     int localLastLogTerm = getLastTerm(); // the last log index
-
 
 	if ((candidateTerm == nodeState.currentTerm) && (nodeState.votedFor != ""))
 	{
@@ -151,9 +150,7 @@ void ChatDialog::sendVote(quint8 vote, quint16 senderPort)
 
 }
 
-void ChatDialog::processAppendEntries(
-		AppendEntryRPC appendEntry,
-		quint16 senderPort)
+void ChatDialog::processAppendEntries(AppendEntryRPC appendEntry, quint16 senderPort)
 {
 	quint32 rcvTerm = appendEntry.term;
 	QString rcvId = appendEntry.leaderId;
@@ -269,14 +266,11 @@ void ChatDialog::processIncomingData(QByteArray datagramReceived, NetSocket *soc
 	{
 		qDebug() << "MESSAGE CONTAINS APPEND_ENTRIES";
 
-		QMap<QString, QMap<QString, QMap<quint32 , QMap<QString, QVariant>>>> appendEntryMessage;
+		QMap<QString, AppendEntryRPC> appendEntryMessage;
 		QDataStream entries_msg(&datagramReceived,  QIODevice::ReadWrite);
 		entries_msg >> appendEntryMessage;
 
-		processAppendEntries(
-				messageReceived.value("AppendEntries"),
-				appendEntryMessage["AppendEntries"].value("entries"),
-				senderPort);
+		processAppendEntries(appendEntryMessage.value("AppendEntries"), senderPort);
 
 	}
 	else if (messageReceived.contains("VoteReply"))
@@ -290,6 +284,10 @@ void ChatDialog::processIncomingData(QByteArray datagramReceived, NetSocket *soc
 
 	{
 		processACK(messageReceived.value("ACK"), senderPort);
+	}
+	else if (messageReceived.contains("MSG"))
+	{
+		// leader process message
 	}
 	else {
 		qDebug() << "Unsupported message RPC type";
@@ -329,7 +327,6 @@ void ChatDialog::processACK(QMap<QString, QVariant> ack, quint16 senderPort)
 		QMap<QString, AppendEntryRPC> appendEntryToSend;
 		AppendEntryRPC appendEntry;
 
-
 		leaderState.nextIndex[candidateId]= candidateNextIndex - 1;
 
 		appendEntry.term = nodeState.currentTerm;
@@ -341,8 +338,8 @@ void ChatDialog::processACK(QMap<QString, QVariant> ack, quint16 senderPort)
 		
 		for (int i = leaderState.nextIndex[candidateId].toUInt(); i <= nodeState.lastApplied; i++)
 		{
-			appendEntry.entries.insert("term", nodeState.logEntries[i].value("term"));
-			appendEntry.entries.insert("command", nodeState.logEntries[i].value("command"));
+			appendEntry.entries[i].insert("term", nodeState.logEntries[i].value("term"));
+			appendEntry.entries[i].insert("command", nodeState.logEntries[i].value("command"));
 		}
 
 
@@ -351,19 +348,15 @@ void ChatDialog::processACK(QMap<QString, QVariant> ack, quint16 senderPort)
 		stream << appendEntryToSend;
 
 		sendMessage(buffer, senderPort);
-		
+
 	}
 	else
 	{
 		leaderState.nextIndex[candidateId] = nodeState.lastApplied + 1;
 		leaderState.matchIndex[candidateId] = nodeState.lastApplied;
 
-	}	
-	
-						
+	}						
 }
-
-
 
 void ChatDialog::addVoteCount(quint8 vote)
 {
@@ -517,11 +510,10 @@ void ChatDialog::checkCommand(QString text) {
 
 	}
 	else if (text.contains("MSG", Qt::CaseSensitive)) {
-		QMap<>QVariantMap logItem;
+		QMap<QString, QVariant> logItem;
 
 		logItem.insert("command", "MSG");
 		logItem.insert("term", nodeState.currentTerm);
-//		messageMap.insert("Origin", messageToSend.value("Origin"));
 
 		QByteArray buffer;
 		QDataStream stream(&buffer,  QIODevice::ReadWrite);
@@ -530,13 +522,13 @@ void ChatDialog::checkCommand(QString text) {
 
 		qDebug() << "COMMAND MSG";
 
-		if (leaderPort){
-			sendMessage(buffer, leaderPort);
+		if (nodeState.leaderPort != NULL){
+			sendMessage(buffer, nodeState.leaderPort);
 		}
 		else {
 			QList<quint16> peerList = socket->PeerList();
 
-			randomPeer = generateRandomTimeRange(peerList[0], peerList[peerList.size()-1]);
+			quint16 randomPeer = generateRandomTimeRange(peerList[0], peerList[peerList.size()-1]);
 			
 			sendMessage(buffer, peerList[p]);
 		}

@@ -8,6 +8,7 @@
 #include <QTimer>
 #include <QElapsedTimer>
 #include <tuple>
+#include <QObject>
 
 //#define REQUEST_VOTE ""
 // enum for status of a node
@@ -33,10 +34,13 @@ struct leader_state {
 	QMap<QString, QVariant> matchIndex; // init to 0
 };
 
-class AppendEntryRPC : public QObject {
+// Need serializer and deserializer for object
+class AppendEntryRPC : QObject 
+{
 	Q_OBJECT
 
 	public:
+		AppendEntryRPC();
 		quint32 term;
 		QString leaderId;
 		quint32 prevLogIndex;
@@ -97,14 +101,7 @@ private:
 	void processIncomingData(QByteArray datagramReceived, NetSocket *socket, quint16 senderPort);
 	void processACK(QMap<QString, QVariant> ack, quint16 senderPort);
 
-	int getLastEntryFor();
-};
-
-class AppendEntryRPC: public QObject
-{
-    Q_OBJECT;
-public:
-
+	int getLastTerm();
 };
 
 
