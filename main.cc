@@ -554,9 +554,6 @@ void ChatDialog::processMessageReceived(QString messageReceived)
 
 	messageReceived.replace("MSG", "",  Qt::CaseSensitive); // remove the command from the actual message
 
-
-	logItem.insert("command", "MSG"); // TODO what is this for?
-
 	logItem.insert("term", nodeState.currentTerm);
 
 	logItem.insert("message", messageReceived); // this is the actual message text
@@ -610,6 +607,10 @@ void ChatDialog::getNodeCommand()
 	if (nodeState.leaderPort != NULL)
 	{
 		qDebug() << "Leader id: " << nodeState.leaderPort;
+	}
+	else
+	{
+		qDebug() << "There is no leader";
 	}
 }
 
