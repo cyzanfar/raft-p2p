@@ -64,7 +64,9 @@ public:
 	void sendHeartbeat();
 	QTimer *electionTimeout;
 	void processRequestVote(QMap<QString, QVariant> voteRequest, quint16 senderPort);
-	void processAppendEntries(QMap<QString, QVariant> AppendEntries, quint16 senderPort);
+	void processAppendEntries(
+	        QMap<QString, QVariant> appendEntryMessage,
+	        QMap<quint32 , QMap<QString, QVariant>> entries, quint16 senderPort);
 	void sendVote(quint8 vote, quint16 senderPort);
 	int generateRandomTimeRange(int min, int max);
 
@@ -87,5 +89,13 @@ private:
 
 	int getLastEntryFor();
 };
+
+class AppendEntryRPC: public QObject
+{
+    Q_OBJECT;
+public:
+
+};
+
 
 #endif // P2PAPP_MAIN_HH
