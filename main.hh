@@ -64,7 +64,7 @@ public:
 	void sendHeartbeat();
 	QTimer *electionTimeout;
 	void processRequestVote(QMap<QString, QVariant> voteRequest, quint16 senderPort);
-	void processAppendEntries(QMap<QString, QVariant> AppendEntries);
+	void processAppendEntries(QMap<QString, QVariant> AppendEntries, quint16 senderPort);
 	void sendVote(quint8 vote, quint16 senderPort);
 	int generateRandomTimeRange(int min, int max);
 
@@ -83,7 +83,7 @@ private:
 	void addVoteCount(quint8 vote);
 	void sendMessage(QByteArray buffer, quint16 senderPort);
 	void processIncomingData(QByteArray datagramReceived, NetSocket *socket, quint16 senderPort);
-	void processACK(QMap<QString, QVariant> ack, quint16 senderPort)
+	void processACK(QMap<QString, QVariant> ack, quint16 senderPort);
 
 	int getLastEntryFor();
 };
