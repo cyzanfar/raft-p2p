@@ -33,6 +33,18 @@ struct leader_state {
 	QMap<QString, QVariant> matchIndex; // init to 0
 };
 
+class AppendEntryRPC : public QObject {
+	Q_OBJECT
+
+	public:
+		quint32 term;
+		QString leaderId;
+		quint32 prevLogIndex;
+		quint32 prevLogTerm;
+		QMap<quint32, QMap<QString, QVariant>> entries;
+		quint32 leaderCommit;
+};
+
 
 class NetSocket : public QUdpSocket
 {
@@ -64,11 +76,7 @@ public:
 	void sendHeartbeat(quint16 port, QList<quint32>);
 	QTimer *electionTimeout;
 	void processRequestVote(QMap<QString, QVariant> voteRequest, quint16 senderPort);
-<<<<<<< HEAD
 	void processAppendEntries(QMap<QString, QMap<QString, QVariant>> appendEntries, quint16 port);
-=======
-	void processAppendEntries(QMap<QString, QVariant> AppendEntries, quint16 senderPort);
->>>>>>> bb546d1e5612116a951c8f93f985546ee7889155
 	void sendVote(quint8 vote, quint16 senderPort);
 	int generateRandomTimeRange(int min, int max);
 

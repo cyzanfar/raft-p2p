@@ -106,7 +106,7 @@ void ChatDialog::processRequestVote(QMap<QString, QVariant> voteRequest, quint16
     quint32 candidateLastLogTerm = voteRequest.value("lastLogTerm").toUInt();
 
     int localLastLogIndex = nodeState.lastApplied; // the last log index
-    int localLastLogTerm = getLastEntryFor(); // the last log index
+    int localLastLogTerm = getLastTerm(); // the last log index
 
 
 	if ((candidateTerm == nodeState.currentTerm) && (nodeState.votedFor != ""))
@@ -152,16 +152,15 @@ void ChatDialog::sendVote(quint8 vote, quint16 senderPort)
 }
 
 void ChatDialog::processAppendEntries(
-		QMap<QString, QMap<quint32 ,
-		QMap<QString, QVariant>>> appendEntries,
+		QMap<QString, QMap<quint32, QMap<QString, QVariant>>> appendEntries,
 		quint16 senderPort)
 {
 	quint32 rcvTerm = appendEntries.value("term");
 	QString rcvId = appendEntries.value("id");
 	quint32 rcvPrevLogIndex = appendEntries.value("prevLogIndex");
 	quint32 rcvPrevLogTerm = appendEntries.value("prevLogTerm");
-	QMap<quint32, QMap<QString, QVariant>> entries = appendEntries["AppendEntries"].value("entries");
 	quint32 rcvCommitIndex = appendEntries.value("leaderCommit");
+	QMap <quint32, QMap<QString, QVariant>> entries = appendEntries["AppendEntries"].value("entries");
 
 	// build response from append entries
 	QMap<QString, QMap<QString, QVariant>> ackToSend;
@@ -269,7 +268,7 @@ void ChatDialog::processIncomingData(QByteArray datagramReceived, NetSocket *soc
 	{
 		qDebug() << "MESSAGE CONTAINS APPEND_ENTRIES";
 
-		QMap<QString, QMap<QString, QMap<QString, QVariant>>> entries;
+		QMap<QString, QMap<QString, QMap<quint32, QMap<QString, QVariant>>>> entries;
 		QDataStream stream_msg(&datagramReceived,  QIODevice::ReadWrite);
 		stream_msg >> entries;
 		
@@ -320,29 +319,23 @@ void ChatDialog::processACK(QMap<QString, QVariant> ack, quint16 senderPort)
 	{
 		leaderState.nextIndex[candidateId]= candidateNextIndex - 1;
 		
-		// retry sending
-		QMap<QString, QMap<QString, QVariant> appendEntryToSend;
-		
-		QMap<quint32, QMap<QString, QVariant>> entries; 
-		
+		AppendEntryRPC appendEntry;
+
+		appendEntry.term = nodeState.currentTerm;
+		appendEntry.leaderId = nodeState.id;
+		appendEntry.prevLogIndex = nodeState.lastApplied;
+		appendEntry.prevLogTerm = getLastTerm();
+		appendEntry.leaderCommit = nodeState.commitIndex;
+
 		QByteArray buffer;
 		QDataStream stream(&buffer, QIODevice::ReadWrite);
-
-		appendEntryToSend["AppendEntries"].insert("term", nodeState.currentTerm);
-		appendEntryToSend["AppendEntries"].insert("leaderId", nodeState.id);
-		appendEntryToSend["AppendEntries"].insert("prevLogIndex", nodeState.lastApplied);
-		appendEntryToSend["AppendEntries"].insert("prevLogTerm", getLastEntryFor());
-		appendEntryToSend["AppendEntries"].insert("leaderCommit", nodeState.commitIndex);		
 		
 		for (int i = leaderState.nextIndex[candidateId]; i <= nodeState.lastApplied; i++) 
 		{
-			entries[i].insert("term", nodeState.logEntries[i].value("term"))													
-			entries[i].insert("command", nodeState.logEntries[i].value("command"))																									
-		}
+			appendEntry.entries.insert("term", nodeState.logEntries[i].value("term"));
+			appendEntry.entries.insert("command", nodeState.logEntries[i].value("command"));
 
-        append["AppendEntries"].insert("entries", entries)							
-		
-		stream << appendEntryToSend;
+		stream << appendEntry;
 		sendMessage(buffer, senderPort);
 		
 	}
@@ -391,7 +384,7 @@ void ChatDialog::sendRequestVoteRPC()
 	requestVoteMap["RequestVote"].insert("candidateId", nodeState.id);
 
 	requestVoteMap["RequestVote"].insert("lastLogIndex", nodeState.lastApplied);
-	requestVoteMap["RequestVote"].insert("lastLogTerm", getLastEntryFor());
+	requestVoteMap["RequestVote"].insert("lastLogTerm", getLastTerm());
 
 	stream << requestVoteMap;
 
@@ -414,7 +407,7 @@ void ChatDialog::sendHeartbeat(quint16 port, QList<quint32>) {
 	heartBeatMap["AppendEntries"].insert("leaderId", nodeState.id);
 	heartBeatMap["AppendEntries"].insert("prevLogIndex", nodeState.lastApplied);
 
-	heartBeatMap["AppendEntries"].insert("prevLogTerm", getLastEntryFor());
+	heartBeatMap["AppendEntries"].insert("prevLogTerm", getLastTerm());
 	heartBeatMap["AppendEntries"].insert("entries", entries);
 	heartBeatMap["AppendEntries"].insert("leaderCommit", nodeState.commitIndex);
 
@@ -424,7 +417,7 @@ void ChatDialog::sendHeartbeat(quint16 port, QList<quint32>) {
 
 }
 
-int ChatDialog::getLastEntryFor()
+int ChatDialog::getLastTerm()
 {
 	int response = 0;
 
