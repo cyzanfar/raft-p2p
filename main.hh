@@ -76,7 +76,7 @@ public:
 	void sendHeartbeat(quint16 port, QList<quint32>);
 	QTimer *electionTimeout;
 	void processRequestVote(QMap<QString, QVariant> voteRequest, quint16 senderPort);
-	void processAppendEntries(QMap<QString, QMap<QString, QVariant>> appendEntries, quint16 port);
+	void processAppendEntries(AppendEntryRPC appendEntry, quint16 port);
 	void sendVote(quint8 vote, quint16 senderPort);
 	int generateRandomTimeRange(int min, int max);
 
