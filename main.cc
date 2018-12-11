@@ -53,8 +53,8 @@ ChatDialog::ChatDialog()
 	// index of highest log entry known to be committed
 	nodeState.commitIndex = 0;
 
-	// set vote null
-	nodeState.votedFor = NULL;
+	// set vote empty string
+	nodeState.votedFor = "";
 
 	// // Initialize timer for heartbeat timeout
 	heartbeatTimer = new QTimer(this);
@@ -92,13 +92,6 @@ void ChatDialog::readPendingMessages()
 	}
 }
 
-
-//
-//void NetSocket::processPingMessage(QHostAddress sender, quint16 senderPort) {
-//	// Send ping reply
-//	sendPingReply(sender, senderPort);
-//}
-
 void ChatDialog::processRequestVote(QMap<QString, QVariant> voteRequest, quint16 senderPort)
 {
 
@@ -115,8 +108,8 @@ void ChatDialog::processRequestVote(QMap<QString, QVariant> voteRequest, quint16
     int localLastLogIndex = nodeState.lastApplied; // the last log index
     int localLastLogTerm = getLastEntryFor(); // the last log index
 
-    
-	if ((candidateTerm == nodeState.currentTerm) && (nodeState.votedFor != NULL))
+
+	if ((candidateTerm == nodeState.currentTerm) && (nodeState.votedFor != ""))
 	{
 		sendVote(0, senderPort);
 	}
@@ -125,7 +118,7 @@ void ChatDialog::processRequestVote(QMap<QString, QVariant> voteRequest, quint16
 		sendVote(0, senderPort);
 	}
 	else if ((candidateLastLogTerm < localLastLogTerm) || \
-		(nodeState.votedFor != NULL))
+		(nodeState.votedFor != ""))
 	{
 		sendVote(0, senderPort);
 	}
@@ -158,7 +151,10 @@ void ChatDialog::sendVote(quint8 vote, quint16 senderPort)
 
 }
 
-void ChatDialog::processAppendEntries(QMap<QString, QVariant> appendEntries, quint16 port)
+void ChatDialog::processAppendEntries(
+		QMap<QString, QMap<quint32 ,
+		QMap<QString, QVariant>>> appendEntries,
+		quint16 senderPort)
 {
 	quint32 rcvTerm = appendEntries.value("term");
 	QString rcvId = appendEntries.value("id");
@@ -173,7 +169,8 @@ void ChatDialog::processAppendEntries(QMap<QString, QVariant> appendEntries, qui
 	QDataStream stream(&buffer, QIODevice::ReadWrite);
 
 
-	if ((nodeStatus == CANDIDATE) {
+	if ((nodeStatus == CANDIDATE)
+	{
 
 		if (rcvTerm >= nodeState.currentTerm)
 		{
@@ -193,7 +190,7 @@ void ChatDialog::processAppendEntries(QMap<QString, QVariant> appendEntries, qui
 
 		stream << ackToSend;
 		
-		sendMessage(buffer, port);
+		sendMessage(buffer, senderPort);
 		
 		return;
 	}
@@ -306,8 +303,8 @@ void ChatDialog::processACK(QMap<QString, QVariant> ack, quint16 senderPort)
 	// • If there exists an N such that N > commitIndex, a majority
 	// of matchIndex[i] ≥ N, and log[N].term == currentTerm: set commitIndex = N (§5.3, §5.4).
 
-				
-	QString candidateId = ack.value('candidateId').toString();
+
+	QString candidateId = ack.value("candidateId").toString();
 	quint32 candidateNextIndex =  leaderState.nextIndex.value(candidateId)
 	
 
@@ -324,7 +321,7 @@ void ChatDialog::processACK(QMap<QString, QVariant> ack, quint16 senderPort)
 		leaderState.nextIndex[candidateId]= candidateNextIndex - 1;
 		
 		// retry sending
-		QMap<QString, QL<QString, QVariant> appendEntryToSend;
+		QMap<QString, QMap<QString, QVariant> appendEntryToSend;
 		
 		QMap<quint32, QMap<QString, QVariant>> entries; 
 		
