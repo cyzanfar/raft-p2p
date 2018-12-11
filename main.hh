@@ -7,7 +7,7 @@
 #include <QtNetwork/QUdpSocket>
 #include <QTimer>
 #include <QElapsedTimer>
-#include<tuple>
+#include <tuple>
 
 //#define REQUEST_VOTE ""
 // enum for status of a node
@@ -18,15 +18,17 @@ struct node_state {
 	quint32 currentTerm; // init to 0
 	QString votedFor;
 	QString id; // init to node id
-	QList<std::tuple<quint16, quint16, QString>> logEntries; // empty on start
+	// index, term, command
+	QMap<quint32, QMap<QString, QVariant>> logEntries; // empty on start
+	// index of highest log entry known commited
 	volatile quint32 commitIndex; // init to 0
+	// index of highest log entry applied
 	volatile quint32 lastApplied; // init to 0
 	bool isLeader; // TODO init to false?
-
+	quint16 leaderPort;
 };
 
 struct leader_state {
-
 	QMap<QString, QVariant> nextIndex; // init to leader last log+1
 	QMap<QString, QVariant> matchIndex; // init to 0
 };
@@ -60,17 +62,17 @@ public:
 	QList<quint16> neighborList;
 	QTimer *heartbeatTimer;
 	void sendHeartbeat();
-	QTimer *requestVoteTimer;
+	QTimer *electionTimeout;
 	void processRequestVote(QMap<QString, QVariant> voteRequest, quint16 senderPort);
 	void processAppendEntries(QMap<QString, QVariant> AppendEntries);
 	void sendVote(quint8 vote, quint16 senderPort);
-	int generateRandomTimeRange();
+	int generateRandomTimeRange(int min, int max);
 
 public slots:
 	void gotReturnPressed();
 	void readPendingMessages();
 	void handleHeartbeatTimeout();
-//	void handleRequestVoteTimeout();
+	void handleElectionTimeout();
 
 private:
 	QTextEdit *textview;
@@ -81,7 +83,9 @@ private:
 	void addVoteCount(quint8 vote);
 	void sendMessage(QByteArray buffer, quint16 senderPort);
 	void processIncomingData(QByteArray datagramReceived, NetSocket *socket, quint16 senderPort);
-	int getLastEntryFor(QList<std::tuple<quint16, quint16, QString>> logEntries, int pos);
+	void processACK(QMap<QString, QVariant> ack, quint16 senderPort)
+
+	int getLastEntryFor();
 };
 
 #endif // P2PAPP_MAIN_HH
