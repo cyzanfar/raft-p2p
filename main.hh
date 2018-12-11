@@ -8,7 +8,6 @@
 #include <QTimer>
 #include <QElapsedTimer>
 #include <tuple>
-#include <QObject>
 
 //#define REQUEST_VOTE ""
 // enum for status of a node
@@ -22,9 +21,9 @@ struct node_state {
 	// index, term, command
 	QMap<quint32, QMap<QString, QVariant>> logEntries; // empty on start
 	// index of highest log entry known commited
-	volatile quint32 commitIndex; // init to 0
+	quint32 commitIndex; // init to 0
 	// index of highest log entry applied
-	volatile quint32 lastApplied; // init to 0
+	quint32 lastApplied; // init to 0
 	bool isLeader; // TODO init to false?
 	quint16 leaderPort;
 };
@@ -35,10 +34,8 @@ struct leader_state {
 };
 
 // Need serializer and deserializer for object
-class AppendEntryRPC : QObject 
+class AppendEntryRPC
 {
-	Q_OBJECT
-
 	public:
 		AppendEntryRPC();
 		quint32 term;
@@ -47,6 +44,8 @@ class AppendEntryRPC : QObject
 		quint32 prevLogTerm;
 		QMap<quint32, QMap<QString, QVariant>> entries;
 		quint32 leaderCommit;
+		QByteArray serializeObject();
+		void deserializeStream(QByteArray receivedData);
 };
 
 
