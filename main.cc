@@ -389,39 +389,43 @@ void ChatDialog::processIncomingData(QByteArray datagramReceived, NetSocket *soc
 			QString msgOrigin = messageReceived["MSG"].value("origin").toString();
 			QString msgRcvd = messageReceived["MSG"].value("msg").toString();
 
-			qDebug() << "origin" << msgOrigin;
-			qDebug() << "msg" << msgRcvd;
+			QMap<QString, QVariant> msgToAppend;
 
-			nodeState.messageList[nodeState.nextPending].insert("origin", msgOrigin);
-			nodeState.messageList[nodeState.nextPending].insert("msg", msgRcvd);
-//
-//			qDebug() << "Added to message list";
-//
-//			nodeState.nextPending++;
-//
-//			qDebug() << "Adding to messageToSend";
-//
-//			QMap<QString, QMap<QString, QVariant>> messageToSend;
-//			messageToSend.insert("MSG", messageReceived.value("MSG"));
-//
-//			qDebug() << "Adding to stream";
-//
-//			QList<quint16> peerList = socket->PeerList();
-//
-//			QByteArray buffer;
-//			QDataStream stream(&buffer,  QIODevice::ReadWrite);
-//
-//			stream << messageToSend;
-//
-//			numberOfMsgVotes = 0;
-//
-//			qDebug() << "Replicating message: " << messageReceived.value("MSG");
-//
-//			for (int p = 0; p < peerList.size(); p++) {
-//				if(peerList[p] != senderPort) {
-//					sendMessage(buffer, peerList[p]);
-//				}
-//			}
+			msgToAppend.insert("origin", msgOrigin);
+			msgToAppend.insert("msg", msgRcvd);
+
+			if (nodeState.messageList.size() == 0) {
+				nodeState.messageList.append(msgToAppend);
+			}
+			else {
+				nodeState.messageList[nodeState.nextPending] = msgToAppend;
+			}
+
+			qDebug() << "Added to message list";
+
+			nodeState.nextPending++;
+
+			QMap<QString, QMap<QString, QVariant>> messageToSend;
+			messageToSend.insert("MSG", messageReceived.value("MSG"));
+
+			qDebug() << "Adding to stream";
+
+			QList<quint16> peerList = socket->PeerList();
+
+			QByteArray buffer;
+			QDataStream stream(&buffer,  QIODevice::ReadWrite);
+
+			stream << messageToSend;
+
+			numberOfMsgVotes = 0;
+
+			qDebug() << "Replicating message: " << messageReceived.value("MSG");
+
+			for (int p = 0; p < peerList.size(); p++) {
+				if(peerList[p] != senderPort) {
+					sendMessage(buffer, peerList[p]);
+				}
+			}
 
 		}
 		else if ((nodeStatus == FOLLOWER) || (nodeStatus == CANDIDATE)) {
@@ -742,7 +746,7 @@ void ChatDialog::checkCommand(QString text) {
 void ChatDialog::processMessageReceived(QString messageReceived, QString origin)
 {
 
-	messageReceived.replace("MSG", "",  Qt::CaseSensitive); // remove the command from the actual message
+	messageReceived.replace("MSG ", "",  Qt::CaseSensitive); // remove the command from the actual message
 
 	QMap<QString, QMap<QString, QVariant>> messageToSend;
 
@@ -794,13 +798,15 @@ void ChatDialog::getNodeCommand()
 	qDebug() << "node ids: " << socket->PeerList();
 	qDebug() << "WAITING 0, FOLLOWER 1, CANDIDATE 2, LEADER 3";
 	qDebug() << "Current State: " << nodeStatus;
-	if (nodeState.leaderPort != 0)
-	{
-		qDebug() << "Leader id: " << nodeState.leaderPort;
-	}
-	else
-	{
-		qDebug() << "There is no leader";
+
+	if (nodeStatus != LEADER) {
+		if (nodeState.leaderPort != 0) {
+			qDebug() << "Leader id: " << nodeState.leaderPort;
+		}
+		else
+		{
+			qDebug() << "There is no leader";
+		}
 	}
 }
 
