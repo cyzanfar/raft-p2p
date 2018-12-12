@@ -53,6 +53,8 @@ ChatDialog::ChatDialog()
 	// index of highest log entry known to be committed
 	nodeState.commitIndex = 0;
 
+	nodeState.nextPending = 0;
+
 	// set vote empty string
 	nodeState.votedFor = "";
 
@@ -62,6 +64,9 @@ ChatDialog::ChatDialog()
 
    	electionTimeout = new QTimer(this);
    	connect(electionTimeout, SIGNAL(timeout()), this, SLOT(handleElectionTimeout()));
+
+	leaderTimeout = new QTimer(this);
+	connect(leaderTimeout , SIGNAL(timeout()), this, SLOT(handleLeaderTimeout()));
 	// socket->pingList = socket->PeerList();
 
 	// Register a callback on the textline's returnPressed signal
@@ -95,6 +100,12 @@ void ChatDialog::readPendingMessages()
 void ChatDialog::processRequestVote(QMap<QString, QVariant> voteRequest, quint16 senderPort)
 {
 
+	if (nodeStatus == LEADER) {
+		qDebug() << "Rejecting vote request";
+
+		return;
+	}
+
 	// If the logs have last entries with different terms,
 	// then the log with the later term is more up-to-date.
 	// If the logs end with the same term, then whichever log
@@ -114,31 +125,33 @@ void ChatDialog::processRequestVote(QMap<QString, QVariant> voteRequest, quint16
 	qDebug() << "candidateLastLogTerm: " << candidateLastLogTerm;
 	qDebug() << "localLastLogTerm: " << localLastLogTerm;
 
-	if ((candidateTerm == nodeState.currentTerm) && (nodeState.votedFor != ""))
+
+	if (candidateTerm > nodeState.currentTerm) {
+		if ((candidateLastLogTerm >= localLastLogTerm) && \
+        (candidateLastLogIndex >= localLastLogIndex)) {
+			qDebug() << "Vote granted";
+			nodeState.votedFor = voteRequest.value("candidateId").toString();
+			nodeState.currentTerm = candidateTerm;
+			sendVote(1, senderPort);
+		}
+	}
+	else if ((candidateTerm == nodeState.currentTerm) && (nodeState.votedFor != ""))
 	{
-		qDebug() << "terms equal";
+		qDebug() << "terms equal, already voted";
 		sendVote(0, senderPort);
 	}
 	else if (candidateTerm < nodeState.currentTerm) 
 	{
+		qDebug() << "terms less than local";
 		sendVote(0, senderPort);
 	}
-	else if ((candidateLastLogTerm < localLastLogTerm) || \
-		(nodeState.votedFor != ""))
-	{
-		sendVote(0, senderPort);
-	}
-	else if ((candidateLastLogTerm == localLastLogTerm) && \
-        (candidateLastLogIndex >= localLastLogIndex)) 
-	{
-		qDebug() << "Vote granted";
-		nodeState.votedFor = voteRequest.value("candidateId").toString();
-		sendVote(1, senderPort);
-
-	}
+//	else if ((candidateLastLogTerm < localLastLogTerm) || \
+//		(nodeState.votedFor != ""))
+//	{
+//		sendVote(0, senderPort);
+//	}
 	else
 	{
-		nodeState.currentTerm = candidateTerm;
 		sendVote(0, senderPort);
 	}
 }
@@ -221,15 +234,32 @@ void ChatDialog::processAppendEntries(AppendEntryRPC appendEntry, quint16 sender
 	QByteArray buffer;
 	QDataStream stream(&buffer, QIODevice::ReadWrite);
 
+	if (nodeStatus == FOLLOWER) {
+		heartbeatTimer->stop();
 
-	if (nodeStatus == CANDIDATE)
+		heartbeatTimer->start(generateRandomTimeRange(5000, 6000));
+
+		nodeState.currentTerm = rcvTerm;
+		nodeState.leaderPort = senderPort;
+	}
+
+	if ((nodeStatus == CANDIDATE) || (nodeStatus == LEADER))
 	{
 
-		if (rcvTerm >= nodeState.currentTerm)
-		{
-			// you recognize the leader and return to follower state because you're weak
-			nodeStatus = FOLLOWER;
+		// you recognize the leader and return to follower state because you're weak
+		if (nodeStatus == CANDIDATE) {
+			electionTimeout->stop();
 		}
+		else if (nodeStatus == LEADER) {
+			leaderTimeout->stop();
+		}
+
+		nodeStatus = FOLLOWER;
+
+		heartbeatTimer->start(generateRandomTimeRange(5000, 6000));
+
+		nodeState.currentTerm = rcvTerm;
+		nodeState.leaderPort = senderPort;
 
 	}
 
@@ -346,10 +376,58 @@ void ChatDialog::processIncomingData(QByteArray datagramReceived, NetSocket *soc
 	{
 		processACK(messageReceived.value("ACK"), senderPort);
 	}
+	else if (messageReceived.contains("MSGACK"))
+	{
+		addMsgVoteCount((quint8)messageReceived["MSGACK"]["success"].toUInt(), messageReceived["MSGACK"].value("msgorigin").toString());
+	}
 	else if (messageReceived.contains("MSG"))
 	{
 		qDebug() << "Recieved message: " << messageReceived.value("MSG");
-		// leader process message
+
+		if (nodeStatus == LEADER) {
+
+			QString msgOrigin = messageReceived["MSG"].value("origin").toString();
+			QString msgRcvd = messageReceived["MSG"].value("msg").toString();
+
+			qDebug() << "origin" << msgOrigin;
+			qDebug() << "msg" << msgRcvd;
+
+			nodeState.messageList[nodeState.nextPending].insert("origin", msgOrigin);
+			nodeState.messageList[nodeState.nextPending].insert("msg", msgRcvd);
+//
+//			qDebug() << "Added to message list";
+//
+//			nodeState.nextPending++;
+//
+//			qDebug() << "Adding to messageToSend";
+//
+//			QMap<QString, QMap<QString, QVariant>> messageToSend;
+//			messageToSend.insert("MSG", messageReceived.value("MSG"));
+//
+//			qDebug() << "Adding to stream";
+//
+//			QList<quint16> peerList = socket->PeerList();
+//
+//			QByteArray buffer;
+//			QDataStream stream(&buffer,  QIODevice::ReadWrite);
+//
+//			stream << messageToSend;
+//
+//			numberOfMsgVotes = 0;
+//
+//			qDebug() << "Replicating message: " << messageReceived.value("MSG");
+//
+//			for (int p = 0; p < peerList.size(); p++) {
+//				if(peerList[p] != senderPort) {
+//					sendMessage(buffer, peerList[p]);
+//				}
+//			}
+
+		}
+		else if ((nodeStatus == FOLLOWER) || (nodeStatus == CANDIDATE)) {
+			QString origin = messageReceived["MSG"].value("origin").toString();
+			sendMsgACK(senderPort, origin);
+		}
 	}
 	else {
 		qDebug() << "Unsupported message RPC type";
@@ -379,7 +457,7 @@ void ChatDialog::processACK(QMap<QString, QVariant> ack, quint16 senderPort)
 		// BECOME follower
 		nodeStatus = FOLLOWER;
 		nodeState.currentTerm = rcvAckTerm;
-		return;		
+		return;
 	}
 
 	if (rcvAckSuccess == 0) 
@@ -413,6 +491,23 @@ void ChatDialog::processACK(QMap<QString, QVariant> ack, quint16 senderPort)
 	}						
 }
 
+void ChatDialog::sendMsgACK(quint16 senderPort, QString origin) {
+
+	QMap<QString, QMap<QString, QVariant>> msgACK;
+	QByteArray buffer;
+	QDataStream stream(&buffer, QIODevice::ReadWrite);
+
+	msgACK["MSGACK"].insert("originid", nodeState.id);
+	msgACK["MSGACK"].insert("msgorigin", origin);
+	msgACK["MSGACK"].insert("term", nodeState.currentTerm);
+	msgACK["MSGACK"].insert("success", 1);
+
+	stream << msgACK;
+
+	sendMessage(buffer, senderPort);
+
+}
+
 void ChatDialog::addVoteCount(quint8 vote)
 {
      numberOfVotes += vote;
@@ -422,21 +517,52 @@ void ChatDialog::addVoteCount(quint8 vote)
      {
         // become leader and send heartbeat
 
+        electionTimeout->stop();
         // set vote to 0
         numberOfVotes = 0;
-        qDebug() << "BECAME FUCKING LEADER";
+        qDebug() << "\n\nBECAME FUCKING LEADER\n\n";
         // set status to LEADER
         nodeStatus = LEADER;
+
+		QList<quint16> peerList = socket->PeerList();
+
+		for (int x = 0; x < peerList.size(); x++) {
+			sendHeartbeat(peerList[x]);
+		}
+
+		leaderTimeout->start(generateRandomTimeRange(2000,3000));
 
 		// init nextIndex + 1 for each node
 		// also for matchindex ?
 
-
      }
+}
+
+void ChatDialog::addMsgVoteCount(quint8 msgSuccess, QString origin) {
+
+	numberOfMsgVotes += msgSuccess;
+
+	if (numberOfMsgVotes >= 2) {
+		nodeState.logEntries[nodeState.lastApplied+1].insert("term", nodeState.currentTerm);
+		nodeState.logEntries[nodeState.lastApplied+1].insert("command", nodeState.messageList[nodeState.nextPending-1][origin]);
+		nodeState.logEntries[nodeState.lastApplied+1].insert("origin", origin);
+
+		nodeState.lastApplied++;
+		nodeState.commitIndex++;
+		nodeState.nextPending--;
+
+		QList<quint16> peerList = socket->PeerList();
+
+		for (int x = 0; x < peerList.size(); x++) {
+			sendHeartbeat(peerList[x]);
+		}
+	}
 }
 
 void ChatDialog::sendRequestVoteRPC()
 {
+
+	electionTimeout->start(generateRandomTimeRange(8000, 12000));
 
 	QMap<QString, QMap<QString, QVariant>> requestVoteMap;
 	QByteArray buffer;
@@ -457,8 +583,12 @@ void ChatDialog::sendRequestVoteRPC()
 	}
 }
 
-void ChatDialog::sendHeartbeat(quint16 port, QList<quint32>)
+void ChatDialog::sendHeartbeat(quint16 port)
 {
+
+	if (nodeStatus != LEADER){
+		nodeStatus = LEADER;
+	}
 
 	AppendEntryRPC appendEntry;
 
@@ -467,6 +597,8 @@ void ChatDialog::sendHeartbeat(quint16 port, QList<quint32>)
 	appendEntry.prevLogIndex = nodeState.lastApplied;
 	appendEntry.prevLogTerm = getLastTerm();
 	appendEntry.leaderCommit = nodeState.commitIndex;
+
+	qDebug() << "\n\n----------SENDING HEARTBEAT-----------\n\n";
 
 	sendMessage(appendEntry.serializeObject(), port);
 
@@ -484,6 +616,21 @@ int ChatDialog::getLastTerm()
     return response;
 }
 
+void ChatDialog::handleLeaderTimeout()
+{
+	qDebug() << "LEADER TIMEOUT OCCURED!!!";
+
+	QList<quint16> peerList = socket->PeerList();
+
+	for (int x = 0; x < peerList.size(); x++) {
+		sendHeartbeat(peerList[x]);
+	}
+
+	leaderTimeout->stop();
+
+	leaderTimeout->start(generateRandomTimeRange(1000, 2000));
+}
+
 void ChatDialog::handleHeartbeatTimeout()
 {
 	qDebug() << "HEARTBEAT TIMEOUT OCCURED!!!";
@@ -494,18 +641,14 @@ void ChatDialog::handleHeartbeatTimeout()
 	nodeStatus = CANDIDATE;
 
 	numberOfVotes = 1;
-	
+
 	heartbeatTimer->stop();
 
 	nodeState.votedFor = nodeState.id;
 
 	sendRequestVoteRPC();
-	
-    numberOfVotes++;
 
-//	heartbeatTimer->start(generateRandomTimeRange(150, 300));
-
-	electionTimeout->start(generateRandomTimeRange(300, 450));
+	numberOfVotes++;
 }
 
 void ChatDialog::handleElectionTimeout()
@@ -516,9 +659,9 @@ void ChatDialog::handleElectionTimeout()
 
    electionTimeout->stop();
 
-   sendRequestVoteRPC();
+   nodeState.currentTerm++;
 
-//   electionTimeout->start(generateRandomTimeRange(300, 400));
+   sendRequestVoteRPC();
 
 }
 
@@ -551,7 +694,7 @@ void ChatDialog::checkCommand(QString text) {
 		nodeStatus = FOLLOWER;
 
  		// waiting for heartbeat
-		heartbeatTimer->start(generateRandomTimeRange(150, 300));
+		heartbeatTimer->start(generateRandomTimeRange(4000, 8000));
 
 		// if timer runs out change state to CANDIDATE
 		// else respond to heatbeats
@@ -560,7 +703,7 @@ void ChatDialog::checkCommand(QString text) {
 	else if (text.contains("MSG", Qt::CaseSensitive)) {
 		qDebug() << "COMMAND MSG";
 
-		processMessageReceived(text);
+		processMessageReceived(text, this->local_origin);
 	}
 	else if (text.contains("GET_CHAT", Qt::CaseSensitive)) {
 		// Print current chat history of the selected node
@@ -583,7 +726,7 @@ void ChatDialog::checkCommand(QString text) {
 	else if (text.contains("RESTORE", Qt::CaseSensitive)) {
 		qDebug() << "COMMAND RESTORE";
 
-		restoreDropppedNode(text);
+		restoreDroppedNode(text);
 
 	}
 	else if (text.contains("GET_NODES", Qt::CaseSensitive)) {
@@ -596,21 +739,20 @@ void ChatDialog::checkCommand(QString text) {
 	return;
 }
 
-void ChatDialog::processMessageReceived(QString messageReceived)
+void ChatDialog::processMessageReceived(QString messageReceived, QString origin)
 {
-	QMap<QString, QVariant> logItem;
 
 	messageReceived.replace("MSG", "",  Qt::CaseSensitive); // remove the command from the actual message
 
-	logItem.insert("term", nodeState.currentTerm);
+	QMap<QString, QMap<QString, QVariant>> messageToSend;
 
-	logItem.insert("message", messageReceived); // this is the actual message text
+	messageToSend["MSG"].insert("origin", origin);
+	messageToSend["MSG"].insert("msg", messageReceived);
 
 	QByteArray buffer;
 	QDataStream stream(&buffer,  QIODevice::ReadWrite);
 
-	stream << logItem;
-
+	stream << messageToSend;
 
 	if (nodeState.leaderPort != 0){
 		sendMessage(buffer, nodeState.leaderPort);
@@ -634,7 +776,7 @@ void ChatDialog::processDropNode(QString dropNodeMessage)
 	qDebug() << "Dropped node_id: " << str[1];
 }
 
-void ChatDialog::restoreDropppedNode(QString restoreNodeMessage)
+void ChatDialog::restoreDroppedNode(QString restoreNodeMessage)
 {
 	QStringList str;
 
