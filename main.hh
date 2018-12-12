@@ -18,13 +18,15 @@ struct node_state {
 	quint32 currentTerm; // init to 0
 	QString votedFor;
 	QString id; // init to node id
+	// origin, message
+	QList<QMap<QString, QVariant>> messageList;
 	// index, term, command
 	QMap<quint32, QMap<QString, QVariant>> logEntries; // empty on start
 	// index of highest log entry known commited
 	quint32 commitIndex; // init to 0
 	// index of highest log entry applied
 	quint32 lastApplied; // init to 0
-	bool isLeader; // TODO init to false?
+	quint32 nextPending;
 	quint16 leaderPort;
 };
 
@@ -33,7 +35,6 @@ struct leader_state {
 	QMap<QString, QVariant> matchIndex; // init to 0
 };
 
-// Need serializer and deserializer for object
 class AppendEntryRPC
 {
 	public:
@@ -47,7 +48,6 @@ class AppendEntryRPC
 		QByteArray serializeObject();
 		void deserializeStream(QByteArray receivedData);
 };
-
 
 class NetSocket : public QUdpSocket
 {
@@ -73,7 +73,8 @@ public:
 	QString local_origin;
 	QList<QString> droppedNodes;
 	QTimer *heartbeatTimer;
-	void sendHeartbeat(quint16 port, QList<quint32>);
+	QTimer *leaderTimeout;
+	void sendHeartbeat(quint16 port);
 	QTimer *electionTimeout;
 	void processRequestVote(QMap<QString, QVariant> voteRequest, quint16 senderPort);
 	void processAppendEntries(AppendEntryRPC appendEntry, quint16 port);
@@ -85,22 +86,26 @@ public slots:
 	void readPendingMessages();
 	void handleHeartbeatTimeout();
 	void handleElectionTimeout();
+	void handleLeaderTimeout();
 
 private:
 	QTextEdit *textview;
 	QLineEdit *textline;
 	quint16 numberOfVotes;
+	quint16 numberOfMsgVotes;
 	void checkCommand(QString command);
 	void sendRequestVoteRPC();
 	void addVoteCount(quint8 vote);
+	void sendMsgACK(quint16 senderPort, QString origin);
+	void addMsgVoteCount(quint8 msgSuccess, QString origin);
 	void sendMessage(QByteArray buffer, quint16 senderPort);
 	void processIncomingData(QByteArray datagramReceived, NetSocket *socket, quint16 senderPort);
 	void processACK(QMap<QString, QVariant> ack, quint16 senderPort);
     void getNodeCommand();
 	int getLastTerm();
 	void processDropNode(QString dropNodeMessage);
-	void restoreDropppedNode(QString restoreNodeMessage);
-	void processMessageReceived(QString messageReceived);
+	void restoreDroppedNode(QString restoreNodeMessage);
+	void processMessageReceived(QString messageReceived, QString origin);
 };
 
 
