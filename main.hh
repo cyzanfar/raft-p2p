@@ -9,7 +9,14 @@
 #include <QElapsedTimer>
 #include <tuple>
 
-//#define REQUEST_VOTE ""
+#define REQUEST_VOTE "RequestVote"
+#define APPEND_ENTRIES "AppendEntries"
+#define VOTE_REPLY "VoteReply"
+#define ACK "ACK"
+#define MSG_ACK "MSGACK"
+#define MSG "MSG"
+
+
 // enum for status of a node
 enum node_status { WAITING, FOLLOWER, CANDIDATE, LEADER };
 
@@ -93,6 +100,7 @@ private:
 	QLineEdit *textline;
 	quint16 numberOfVotes;
 	quint16 numberOfMsgVotes;
+	quint32 getLastTerm();
 	void checkCommand(QString command);
 	void sendRequestVoteRPC();
 	void addVoteCount(quint8 vote);
@@ -102,10 +110,10 @@ private:
 	void processIncomingData(QByteArray datagramReceived, NetSocket *socket, quint16 senderPort);
 	void processACK(QMap<QString, QVariant> ack, quint16 senderPort);
     void getNodeCommand();
-	int getLastTerm();
 	void processDropNode(QString dropNodeMessage);
 	void restoreDroppedNode(QString restoreNodeMessage);
 	void processMessageReceived(QString messageReceived, QString origin);
+    void sendAckToLeader(quint8 success, quint16 senderPort);
 };
 
 

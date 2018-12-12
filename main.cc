@@ -167,16 +167,16 @@ QByteArray AppendEntryRPC::serializeObject() {
 	QByteArray buffer;
 	QDataStream stream(&buffer,  QIODevice::ReadWrite);
 
-	messageToSend["AppendEntries"].insert("term", this->term);
-	messageToSend["AppendEntries"].insert("leaderId", this->leaderId);
-	messageToSend["AppendEntries"].insert("prevLogIndex", this->prevLogIndex);
-	messageToSend["AppendEntries"].insert("prevLogTerm", this->prevLogTerm);
-	messageToSend["AppendEntries"].insert("leaderCommit", this->leaderCommit);
+	messageToSend[APPEND_ENTRIES].insert("term", this->term);
+	messageToSend[APPEND_ENTRIES].insert("leaderId", this->leaderId);
+	messageToSend[APPEND_ENTRIES].insert("prevLogIndex", this->prevLogIndex);
+	messageToSend[APPEND_ENTRIES].insert("prevLogTerm", this->prevLogTerm);
+	messageToSend[APPEND_ENTRIES].insert("leaderCommit", this->leaderCommit);
 
 	stream << messageToSend;
 
 	if (this->entries.size() > 0) {
-		entriesToSend["AppendEntries"].insert("entries", this->entries);
+		entriesToSend[APPEND_ENTRIES].insert("entries", this->entries);
 		stream << entriesToSend;
 	}
 
@@ -194,14 +194,14 @@ void AppendEntryRPC::deserializeStream(QByteArray receivedData) {
 	QDataStream entries_msg(&receivedData,  QIODevice::ReadWrite);
 	entries_msg >> appendEntryMessage;
 
-	this->term = messageReceived["AppendEntries"].value("term").toUInt();
-	this->leaderId = messageReceived["AppendEntries"].value("leaderId").toString();
-	this->prevLogIndex = messageReceived["AppendEntries"].value("prevLogIndex").toUInt();
-	this->prevLogTerm = messageReceived["AppendEntries"].value("prevLogTerm").toUInt();
-	this->leaderCommit = messageReceived["AppendEntries"].value("leaderCommit").toUInt();
+	this->term = messageReceived[APPEND_ENTRIES].value("term").toUInt();
+	this->leaderId = messageReceived[APPEND_ENTRIES].value("leaderId").toString();
+	this->prevLogIndex = messageReceived[APPEND_ENTRIES].value("prevLogIndex").toUInt();
+	this->prevLogTerm = messageReceived[APPEND_ENTRIES].value("prevLogTerm").toUInt();
+	this->leaderCommit = messageReceived[APPEND_ENTRIES].value("leaderCommit").toUInt();
 
-	if (appendEntryMessage["AppendEntries"].value("entries").size() > 0) {
-		this->entries = appendEntryMessage["AppendEntries"].value("entries");
+	if (appendEntryMessage[APPEND_ENTRIES].value("entries").size() > 0) {
+		this->entries = appendEntryMessage[APPEND_ENTRIES].value("entries");
 	}
 
 }
@@ -212,7 +212,7 @@ void ChatDialog::sendVote(quint8 vote, quint16 senderPort)
 	QByteArray buffer;
 	QDataStream stream(&buffer,  QIODevice::ReadWrite);
 
-	voteToSend["VoteReply"].insert("vote", vote);
+	voteToSend[VOTE_REPLY].insert("vote", vote);
 
 	stream << voteToSend;
 
@@ -267,18 +267,13 @@ void ChatDialog::processAppendEntries(AppendEntryRPC appendEntry, quint16 sender
 	{
 		// reply false -> leader update its currenterm to 
 		// rcv term and set itself to follower
-		ackToSend["ACK"].insert("originid", nodeState.id);
-		ackToSend["ACK"].insert("term", nodeState.currentTerm);
-		ackToSend["ACK"].insert("success", 0);
-
-		stream << ackToSend;
-		
-		sendMessage(buffer, senderPort);
+		sendAckToLeader(0, senderPort);
 		
 		return;
 	}
 
-	if (nodeState.logEntries.contains(rcvPrevLogIndex)) {
+	if (nodeState.logEntries.contains(rcvPrevLogIndex))
+	{
 
 		QMap<QString, QVariant> localEntry;
 
@@ -287,13 +282,7 @@ void ChatDialog::processAppendEntries(AppendEntryRPC appendEntry, quint16 sender
 		if (rcvPrevLogTerm != localEntry["term"]) 
 		{
 			// reply false
-			ackToSend["ACK"].insert("originid", nodeState.id);
-			ackToSend["ACK"].insert("term", nodeState.currentTerm);
-			ackToSend["ACK"].insert("success", 0);
-
-			stream << ackToSend;
-			
-			sendMessage(buffer, senderPort);
+			sendAckToLeader(0, senderPort);
 
 			for (quint32 i = rcvPrevLogIndex; i <= nodeState.lastApplied; i++) {
 				nodeState.logEntries.remove(i);
@@ -311,26 +300,32 @@ void ChatDialog::processAppendEntries(AppendEntryRPC appendEntry, quint16 sender
 					}
 				}
 
-				ackToSend["ACK"].insert("originid", nodeState.id);
-				ackToSend["ACK"].insert("term", nodeState.currentTerm);
-				ackToSend["ACK"].insert("success", 1);
-
-				stream << ackToSend;
-				
-				sendMessage(buffer, senderPort);
+				sendAckToLeader(1, senderPort);
 			}
 		}
 	}
 
 	if (rcvCommitIndex > nodeState.commitIndex)
 	{
-		if (rcvCommitIndex > nodeState.lastApplied) {
-			nodeState.commitIndex = nodeState.lastApplied;
-		}
-		else {
-			nodeState.commitIndex = rcvCommitIndex;
-		}
+		nodeState.commitIndex = std::max(nodeState.lastApplied, rcvCommitIndex);
 	}
+}
+
+void ChatDialog::sendAckToLeader(quint8 success, quint16 senderPort)
+{
+    // build response from append entries
+    QMap<QString, QMap<QString, QVariant>> ackToSend;
+    QByteArray buffer;
+    QDataStream stream(&buffer, QIODevice::ReadWrite);
+
+    ackToSend[ACK].insert("originid", nodeState.id);
+	ackToSend[ACK].insert("term", nodeState.currentTerm);
+	ackToSend[ACK].insert("success", success);
+
+	stream << ackToSend;
+
+	sendMessage(buffer, senderPort);
+
 }
 
 // Process the message read from pending messages from sock
@@ -349,13 +344,13 @@ void ChatDialog::processIncomingData(QByteArray datagramReceived, NetSocket *soc
 
 	qDebug() << "Data received: " << messageReceived;
 
-	if (messageReceived.contains("RequestVote"))
+	if (messageReceived.contains(REQUEST_VOTE))
 	{
         qDebug() << "MESSAGE CONTAINS REQUEST_VOTE";
 
-		processRequestVote(messageReceived.value("RequestVote"), senderPort);
+		processRequestVote(messageReceived.value(REQUEST_VOTE), senderPort);
 	}
-	else if (messageReceived.contains("AppendEntries"))
+	else if (messageReceived.contains(APPEND_ENTRIES))
 	{
 		qDebug() << "MESSAGE CONTAINS APPEND_ENTRIES";
 
@@ -365,29 +360,32 @@ void ChatDialog::processIncomingData(QByteArray datagramReceived, NetSocket *soc
 		processAppendEntries(appendEntries, senderPort);
 
 	}
-	else if (messageReceived.contains("VoteReply"))
+	else if (messageReceived.contains(VOTE_REPLY))
 	{
 		qDebug() << "MESSAGE CONTAINS VOTE_REPLY";
 
-        addVoteCount((quint8)messageReceived["VoteReply"]["vote"].toUInt());
+        addVoteCount((quint8)messageReceived[VOTE_REPLY]["vote"].toUInt());
 	}
 
-	else if (messageReceived.contains("ACK"))
+	else if (messageReceived.contains(ACK))
 	{
-		processACK(messageReceived.value("ACK"), senderPort);
+		processACK(messageReceived.value(ACK), senderPort);
 	}
-	else if (messageReceived.contains("MSGACK"))
+	else if (messageReceived.contains(MSG_ACK))
 	{
-		addMsgVoteCount((quint8)messageReceived["MSGACK"]["success"].toUInt(), messageReceived["MSGACK"].value("msgorigin").toString());
+		addMsgVoteCount(
+				(quint8)messageReceived[MSG_ACK]["success"].toUInt(),
+				messageReceived[MSG_ACK].value("msgorigin").toString()
+				);
 	}
-	else if (messageReceived.contains("MSG"))
+	else if (messageReceived.contains(MSG))
 	{
-		qDebug() << "Recieved message: " << messageReceived.value("MSG");
+		qDebug() << "Recieved message: " << messageReceived.value(MSG);
 
 		if (nodeStatus == LEADER) {
 
-			QString msgOrigin = messageReceived["MSG"].value("origin").toString();
-			QString msgRcvd = messageReceived["MSG"].value("msg").toString();
+			QString msgOrigin = messageReceived[MSG].value("origin").toString();
+			QString msgRcvd = messageReceived[MSG].value("msg").toString();
 
 			QMap<QString, QVariant> msgToAppend;
 
@@ -406,7 +404,7 @@ void ChatDialog::processIncomingData(QByteArray datagramReceived, NetSocket *soc
 			nodeState.nextPending++;
 
 			QMap<QString, QMap<QString, QVariant>> messageToSend;
-			messageToSend.insert("MSG", messageReceived.value("MSG"));
+			messageToSend.insert(MSG, messageReceived.value(MSG));
 
 			qDebug() << "Adding to stream";
 
@@ -419,7 +417,7 @@ void ChatDialog::processIncomingData(QByteArray datagramReceived, NetSocket *soc
 
 			numberOfMsgVotes = 0;
 
-			qDebug() << "Replicating message: " << messageReceived.value("MSG");
+			qDebug() << "Replicating message: " << messageReceived.value(MSG);
 
 			for (int p = 0; p < peerList.size(); p++) {
 				if(peerList[p] != senderPort) {
@@ -429,7 +427,7 @@ void ChatDialog::processIncomingData(QByteArray datagramReceived, NetSocket *soc
 
 		}
 		else if ((nodeStatus == FOLLOWER) || (nodeStatus == CANDIDATE)) {
-			QString origin = messageReceived["MSG"].value("origin").toString();
+			QString origin = messageReceived[MSG].value("origin").toString();
 			sendMsgACK(senderPort, origin);
 		}
 	}
@@ -501,10 +499,10 @@ void ChatDialog::sendMsgACK(quint16 senderPort, QString origin) {
 	QByteArray buffer;
 	QDataStream stream(&buffer, QIODevice::ReadWrite);
 
-	msgACK["MSGACK"].insert("originid", nodeState.id);
-	msgACK["MSGACK"].insert("msgorigin", origin);
-	msgACK["MSGACK"].insert("term", nodeState.currentTerm);
-	msgACK["MSGACK"].insert("success", 1);
+	msgACK[MSG_ACK].insert("originid", nodeState.id);
+	msgACK[MSG_ACK].insert("msgorigin", origin);
+	msgACK[MSG_ACK].insert("term", nodeState.currentTerm);
+	msgACK[MSG_ACK].insert("success", 1);
 
 	stream << msgACK;
 
@@ -572,11 +570,11 @@ void ChatDialog::sendRequestVoteRPC()
 	QByteArray buffer;
 	QDataStream stream(&buffer, QIODevice::ReadWrite);
 
-	requestVoteMap["RequestVote"].insert("term", nodeState.currentTerm);
-	requestVoteMap["RequestVote"].insert("candidateId", nodeState.id);
+	requestVoteMap[REQUEST_VOTE].insert("term", nodeState.currentTerm);
+	requestVoteMap[REQUEST_VOTE].insert("candidateId", nodeState.id);
 
-	requestVoteMap["RequestVote"].insert("lastLogIndex", nodeState.lastApplied);
-	requestVoteMap["RequestVote"].insert("lastLogTerm", getLastTerm());
+	requestVoteMap[REQUEST_VOTE].insert("lastLogIndex", nodeState.lastApplied);
+	requestVoteMap[REQUEST_VOTE].insert("lastLogTerm", getLastTerm());
 
 	stream << requestVoteMap;
 
@@ -608,13 +606,13 @@ void ChatDialog::sendHeartbeat(quint16 port)
 
 }
 
-int ChatDialog::getLastTerm()
+quint32 ChatDialog::getLastTerm()
 {
-	int response = 0;
+	quint32 response = 0;
 
 	if (!nodeState.logEntries.isEmpty())
 	{
-		response = nodeState.logEntries[nodeState.lastApplied].value("term").toInt();
+		response = (quint32)nodeState.logEntries[nodeState.lastApplied].value("term").toInt();
 	}
 
     return response;
@@ -704,7 +702,7 @@ void ChatDialog::checkCommand(QString text) {
 		// else respond to heatbeats
 
 	}
-	else if (text.contains("MSG", Qt::CaseSensitive)) {
+	else if (text.contains(MSG, Qt::CaseSensitive)) {
 		qDebug() << "COMMAND MSG";
 
 		processMessageReceived(text, this->local_origin);
@@ -750,8 +748,8 @@ void ChatDialog::processMessageReceived(QString messageReceived, QString origin)
 
 	QMap<QString, QMap<QString, QVariant>> messageToSend;
 
-	messageToSend["MSG"].insert("origin", origin);
-	messageToSend["MSG"].insert("msg", messageReceived);
+	messageToSend[MSG].insert("origin", origin);
+	messageToSend[MSG].insert("msg", messageReceived);
 
 	QByteArray buffer;
 	QDataStream stream(&buffer,  QIODevice::ReadWrite);
