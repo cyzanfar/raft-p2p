@@ -108,8 +108,15 @@ void ChatDialog::processRequestVote(QMap<QString, QVariant> voteRequest, quint16
     quint32 localLastLogIndex = nodeState.lastApplied; // the last log index
     quint32 localLastLogTerm = getLastTerm(); // the last log index
 
+    qDebug() << "Voted for: " << nodeState.votedFor;
+	qDebug() << "Candidate term: " << candidateTerm;
+	qDebug() << "Current term: " << nodeState.currentTerm;
+	qDebug() << "candidateLastLogTerm: " << candidateLastLogTerm;
+	qDebug() << "localLastLogTerm: " << localLastLogTerm;
+
 	if ((candidateTerm == nodeState.currentTerm) && (nodeState.votedFor != ""))
 	{
+		qDebug() << "terms equal";
 		sendVote(0, senderPort);
 	}
 	else if (candidateTerm < nodeState.currentTerm) 
@@ -300,6 +307,12 @@ void ChatDialog::processAppendEntries(AppendEntryRPC appendEntry, quint16 sender
 void ChatDialog::processIncomingData(QByteArray datagramReceived, NetSocket *socket, quint16 senderPort)
 {
 
+	if (nodeStatus == WAITING) 
+	{
+		qDebug() << "In WAITING state, return";
+		return;
+	}
+
 	QMap<QString, QMap<QString, QVariant>> messageReceived;
 	QDataStream stream_msg(&datagramReceived,  QIODevice::ReadWrite);
 	stream_msg >> messageReceived;
@@ -330,12 +343,12 @@ void ChatDialog::processIncomingData(QByteArray datagramReceived, NetSocket *soc
 	}
 
 	else if (messageReceived.contains("ACK"))
-
 	{
 		processACK(messageReceived.value("ACK"), senderPort);
 	}
 	else if (messageReceived.contains("MSG"))
 	{
+		qDebug() << "Recieved message: " << messageReceived.value("MSG");
 		// leader process message
 	}
 	else {
@@ -490,7 +503,7 @@ void ChatDialog::handleHeartbeatTimeout()
 	
     numberOfVotes++;
 
-	heartbeatTimer->start(generateRandomTimeRange(150, 300));
+//	heartbeatTimer->start(generateRandomTimeRange(150, 300));
 
 	electionTimeout->start(generateRandomTimeRange(300, 450));
 }
@@ -505,7 +518,7 @@ void ChatDialog::handleElectionTimeout()
 
    sendRequestVoteRPC();
 
-   electionTimeout->start(generateRandomTimeRange(300, 400));
+//   electionTimeout->start(generateRandomTimeRange(300, 400));
 
 }
 
